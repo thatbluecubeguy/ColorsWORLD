@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="160" viewBox="0 0 200 160">
+  <defs>
+    <linearGradient id="fabric" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#111116"/>
+      <stop offset=".28" stop-color="#292a32"/>
+      <stop offset=".52" stop-color="#191a20"/>
+      <stop offset=".76" stop-color="#30313a"/>
+      <stop offset="1" stop-color="#111116"/>
+    </linearGradient>
+    <linearGradient id="waistband" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#454650"/>
+      <stop offset=".45" stop-color="#202127"/>
+      <stop offset="1" stop-color="#101116"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(20 14) scale(.8 .75)" stroke="#0c0d11" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M64 99c19-5 53-5 72 0l-2 11c-21-4-47-4-68 0z" fill="url(#waistband)" stroke-width="2.5"/>
+    <path d="M66 107c18 5 50 5 68 0l10 36c-26 9-62 9-88 0z" fill="url(#fabric)" stroke-width="3"/>
+    <path d="m76 110-8 32 8 2 14-32z" fill="#3a3b45" stroke-width="1.5"/>
+    <path d="m91 112-4 36 9 1 6-36z" fill="#111217" stroke-width="1.3"/>
+    <path d="m109 113 6 36 9-1-6-36z" fill="#353640" stroke-width="1.3"/>
+    <path d="m126 111 13 32 7-2-9-35z" fill="#121318" stroke-width="1.5"/>
+    <path d="M66 107c20 5 48 5 68 0" fill="none" stroke="#62636d" stroke-width="1.4" opacity=".8"/>
+    <path d="M58 142c24 8 60 8 84 0" fill="none" stroke="#73747d" stroke-width="1.7"/>
+    <path d="M80 113 72 140m20-26-3 29m27-29 5 29m8-31 10 26" fill="none" stroke="#555660" stroke-width="1.2" opacity=".8"/>
+    <rect x="94" y="99" width="12" height="8" rx="1.4" fill="#a4a5ac" stroke-width="1.5"/>
+    <rect x="97" y="101" width="6" height="4" rx=".5" fill="#191a20" stroke="none"/>
+  </g>
+</svg>
