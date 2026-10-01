@@ -1,0 +1,8715 @@
+if (typeof String.prototype.replaceAll === "undefined") {
+    String.prototype.replaceAll = function (match, replace) {
+        match = match.replace(/[-[\]{}()*+?.\\\/^$|]/g, "\\$&");
+        return this.replace(new RegExp(match, "g"), replace);
+    }
+}
+
+let speak = { play: () => {} };
+let setVolume = () => {};
+let gravity = false;
+let isWaterLoaded = false;
+
+import("./liblipspeak.js").then((mod) => {
+    speak = mod.speak;
+    setVolume = mod.setVolume;
+    setVolume(localStorage.volume / 100);
+});
+
+$.contextMenu({
+    selector: 'body',
+    build: () => {
+        return {
+            items: {
+                "cancel": {
+                    name: "Cancel",
+                    callback: () => { this.cancel(); }
+                },
+                "reload": {
+                    name: "Reload",
+                    callback: () => {
+                        location.reload(); 
+                    },
+                    visible: () => this.id !== me,
+                },
+"sep1": "---------",
+                "settings": {
+                    name: "Settings",
+                    callback: () => {
+                        openSettings();
+                    },
+                    visible: () => this.id !== me,
+                },
+                "help": {
+                    name: "README",
+                    callback: () => {
+                        helpPopup();
+                    },
+                    visible: () => this.id !== me,
+                },
+"sep1": "---------"
+            }
+        };
+    }
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+    const cursors = [
+        'stopwatch', 
+        'handwait', 
+        'whatever', 
+        'hourglas', 
+        'banana', 
+        'dinosaur', 
+        'horse', 
+        'drums', 
+        'piano',
+        'clockspin',
+        'pingpong',
+        'windows98'
+    ];
+
+    const randomCursor = cursors[Math.floor(Math.random() * cursors.length)];
+    const imgElement = document.getElementById('cursorImage');
+
+    if (imgElement) {
+        imgElement.className = 'cursor-loading-icon';
+        imgElement.src = `./img/cursors/${randomCursor}.gif?v=${Date.now()}`;
+    }
+});
+
+// Alternate TTS voices (Brian/SAPI4) and the /voice command were removed in 1.7.0.
+
+let me = "";
+let admin = false;
+let pope = false;
+let owner = false;
+let radical = false;
+let bigowner = false;
+let runlevel9 = false;
+let hoops = false;
+let contributor = false;
+let developer = false;
+let muted = false;
+let king = false;
+let janitor = false;
+let djs = false;
+let blessed = false;
+let autorejoin = true;
+let blockerror = false;
+let unlocks = [];
+const dmWindows = new Map(); // peerGuid -> { dialog, logEl, input, peerName }
+
+const { entries, values, keys } = Object;
+const { isArray } = Array;
+const { seedrandom, random, floor } = Math;
+
+const MOUTH_SPRITES = { CL: 0, E1: 142, E2: 143, E3: 144, E4: 145, O2: 146, O1: 147 };
+const PHONEME_TO_MOUTH = {
+    "a": MOUTH_SPRITES.E3, "aa": MOUTH_SPRITES.E3, "a:": MOUTH_SPRITES.E3, "A:": MOUTH_SPRITES.E3, "A@": MOUTH_SPRITES.E3,
+    "eI": MOUTH_SPRITES.E4, "E": MOUTH_SPRITES.E4, "3": MOUTH_SPRITES.O2, "3:": MOUTH_SPRITES.O2, "e@": MOUTH_SPRITES.E2,
+    "i": MOUTH_SPRITES.E4, "i:": MOUTH_SPRITES.E4, "i@": MOUTH_SPRITES.E2, "i@3": MOUTH_SPRITES.E2, "I": MOUTH_SPRITES.E3, 
+    "I2": MOUTH_SPRITES.E3, "I#": MOUTH_SPRITES.E3, "aI": MOUTH_SPRITES.E4, "0": MOUTH_SPRITES.E3,
+    "oU": MOUTH_SPRITES.O1, "O": MOUTH_SPRITES.E3, "O:": MOUTH_SPRITES.E3, "OI": MOUTH_SPRITES.O1, "O@": MOUTH_SPRITES.O2, "o@": MOUTH_SPRITES.O2,
+    "aU": MOUTH_SPRITES.O1, "U": MOUTH_SPRITES.O1, "U@": MOUTH_SPRITES.O2, "u": MOUTH_SPRITES.O1, "u:": MOUTH_SPRITES.O1,
+    "V": MOUTH_SPRITES.E4, "a#": MOUTH_SPRITES.E2, "@": MOUTH_SPRITES.E2, "@2": MOUTH_SPRITES.O2, "@-": MOUTH_SPRITES.O2,
+    "b": MOUTH_SPRITES.CL, "d": MOUTH_SPRITES.E1, "f": MOUTH_SPRITES.E1, "g": MOUTH_SPRITES.E1, "h": MOUTH_SPRITES.E1,
+    "dZ": MOUTH_SPRITES.O1, "Z": MOUTH_SPRITES.O1, "k": MOUTH_SPRITES.E1, "@L": MOUTH_SPRITES.E2, "l": MOUTH_SPRITES.E1,
+    "m": MOUTH_SPRITES.CL, "n": MOUTH_SPRITES.E1, "n-": MOUTH_SPRITES.E1, "N": MOUTH_SPRITES.E1,
+    "p": MOUTH_SPRITES.CL, "r": MOUTH_SPRITES.O2, "r-": MOUTH_SPRITES.O2, "s": MOUTH_SPRITES.E1, "S": MOUTH_SPRITES.O2,
+    "t": MOUTH_SPRITES.E1, "t#": MOUTH_SPRITES.E1, "t2": MOUTH_SPRITES.E1, "T": MOUTH_SPRITES.E1, "tS": MOUTH_SPRITES.O1,
+    "D": MOUTH_SPRITES.E1, "v": MOUTH_SPRITES.E1, "w": MOUTH_SPRITES.O1, "j": MOUTH_SPRITES.E1, "z": MOUTH_SPRITES.E1,
+    ";": -1, "_": MOUTH_SPRITES.CL, "_:": MOUTH_SPRITES.CL
+};
+
+function clamp(min, x, max) {
+    return Math.min(Math.max(x, min), max);
+}
+
+
+var recaptchaWidgetId;
+
+      function onRecaptchaLoad() {
+        recaptchaWidgetId = grecaptcha.render('submit-btn', {
+          'sitekey': '6LdCiUItAAAAAI2CGCEcJuhN1IHJzIckMnDbyyW0',
+          'size': 'invisible', 
+          'callback': onSubmit 
+        });
+      }
+
+      function onSubmit(token) {
+        console.log("Verification token:", token);
+        document.getElementById("my-form").submit();
+      }
+
+function s4() {
+    return floor((1 + random()) * 0x10000).toString(16).substring(1);
+}
+// F*ck safari
+if (/iP(ad|hone|od)/.test(navigator.userAgent)) {
+    let timeout;
+    document.addEventListener("touchstart", (e) => {
+        if (e.touches.length > 1) {
+            clearTimeout(timeout);
+            return;
+        };
+        let touch = e.touches[0];
+        timeout = setTimeout(() => {
+            let event = new MouseEvent("contextmenu", {
+                bubbles: true,
+                cancelable: true,
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+            });
+            console.log(e, event);
+            e.target.dispatchEvent(event);
+        }, 500);
+    });
+    document.addEventListener("touchend", () => clearTimeout(timeout));
+    document.addEventListener("touchmove", () => clearTimeout(timeout));
+}
+
+
+function sanitize(text) {
+    return text
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll("\"", "&quot;")
+        .replaceAll("'", "&apos;");
+}
+
+function openModerationPanel(target) {
+    document.getElementById("moderation_panel_overlay")?.remove();
+    const overlay = document.createElement("div");
+    overlay.id = "moderation_panel_overlay";
+    const canHighKing = admin;
+    const canPope = pope;
+    const durationOptions = [
+        ["5m", "5 minutes"], ["10m", "10 minutes"], ["15m", "15 minutes"],
+        ["30m", "30 minutes"], ["45m", "45 minutes"], ["1h", "1 hour"],
+        ["2h", "2 hours"], ["3h", "3 hours"], ["6h", "6 hours"],
+        ...(canHighKing ? [["permanent", "Permanent"]] : []),
+    ];
+    overlay.innerHTML = `
+        <div id="moderation_panel" class="window" role="dialog" aria-modal="true" aria-labelledby="moderation_panel_title">
+            <div class="window_header">
+                <span id="moderation_panel_title">Safety Control</span>
+                <div id="moderation_panel_close" class="window_close" aria-label="Close" role="button" tabindex="0"></div>
+            </div>
+            <div class="window_body" style="flex-direction: column; padding: 0 3px 3px 3px;">
+                <div class="moderation_content">
+                    <div class="mod_target_info">
+                        Target: <strong>${sanitize(target.userPublic.name)}</strong>
+                    </div>
+
+                    <fieldset>
+                        <legend>Parameters</legend>
+                        <div class="mod_field">
+                            <label for="moderation_reason">Reason:</label>
+                            <input type="text" id="moderation_reason" maxlength="300" placeholder="Optional context">
+                        </div>
+                        <div class="mod_field">
+                            <label for="moderation_duration">Ban Time:</label>
+                            <select id="moderation_duration">
+                                ${durationOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
+                            </select>
+                        </div>
+                    </fieldset>
+
+                    <fieldset>
+                        <legend>Execute Action</legend>
+                        <div class="moderation_actions">
+                            <button class="window_button mod_action_btn" data-action="kick">Kick</button>
+                            <button class="window_button mod_action_btn" data-action="ban">Ban</button>
+                            ${canHighKing ? `<button class="window_button mod_action_btn" data-action="mute">Mute 15m</button>` : ""}
+                            ${canPope ? `<button class="window_button mod_action_btn" data-action="shadowban">Shadowban</button><button class="window_button mod_action_btn" data-action="unshadowban">Remove Shadowban</button>` : ""}
+                        </div>
+                    </fieldset>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+
+    overlay.addEventListener("mousedown", (event) => {
+        if (event.target === overlay) close();
+    });
+
+    const closeBtn = overlay.querySelector("#moderation_panel_close");
+    closeBtn.addEventListener("click", close);
+    closeBtn.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") close();
+    });
+    overlay.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") close();
+    });
+    overlay.querySelector("#moderation_reason").focus();
+
+    let confirmTimeout = null;
+    let confirmBtn = null;
+
+    overlay.querySelectorAll("[data-action]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const action = button.dataset.action;
+            const originalText = button.dataset.originalText || button.textContent;
+
+            if (button.dataset.confirming !== "true") {
+                if (confirmBtn && confirmBtn !== button) {
+                    confirmBtn.dataset.confirming = "false";
+                    confirmBtn.textContent = confirmBtn.dataset.originalText;
+                    confirmBtn.classList.remove("confirming");
+                }
+
+                button.dataset.originalText = originalText;
+                button.dataset.confirming = "true";
+                button.textContent = "Confirm " + originalText + "?";
+                button.classList.add("confirming");
+                confirmBtn = button;
+
+                clearTimeout(confirmTimeout);
+                confirmTimeout = setTimeout(() => {
+                    if (button.dataset.confirming === "true") {
+                        button.dataset.confirming = "false";
+                        button.textContent = originalText;
+                        button.classList.remove("confirming");
+                        if (confirmBtn === button) confirmBtn = null;
+                    }
+                }, 3000);
+            } else {
+                const reason = overlay.querySelector("#moderation_reason").value.trim();
+                const duration = action === "ban"
+                    ? overlay.querySelector("#moderation_duration").value
+                    : action === "mute" ? "15m" : "none";
+                cmd(`moderate ${action} ${duration} ${target.id} ${reason}`);
+                close();
+            }
+        });
+    });
+}
+
+const COLOR_VARIANTS = {
+    red: "#ff5f5f",
+    orange: "#ff9f43",
+    yellow: "#ffe066",
+    green: "#6fe98c",
+    cyan: "#4edcff",
+    blue: "#5aa9ff",
+    purple: "#b88cff",
+    pink: "#ff82c1",
+    black: "#000000",
+    white: "#ffffff",
+    gray: "#8a8a8a",
+    lime: "#79ff79",
+    brown: "#9b6b41",
+};
+
+// /ingredients data — purely for fun, not an actual cooking guide.
+const INGREDIENTS_DATA = {
+    pizza: { emoji: "🍕", name: "Pizza", list: ["Pizza dough", "Tomato sauce", "Mozzarella cheese", "Pepperoni or toppings", "Oregano", "Olive oil"] },
+    burger: { emoji: "🍔", name: "Burger", list: ["Burger bun", "Beef patty", "Cheese", "Lettuce", "Tomato", "Onion", "Pickles", "Sauce"] },
+    hotdog: { emoji: "🌭", name: "Hot Dog", list: ["Hot dog sausage", "Hot dog bun", "Ketchup", "Mustard", "Onions"] },
+    fries: { emoji: "🍟", name: "Fries", list: ["Potatoes", "Salt", "Cooking oil"] },
+    steak: { emoji: "🥩", name: "Steak", list: ["Beef steak", "Salt", "Black pepper", "Butter", "Garlic", "Herbs"] },
+    friedchicken: { emoji: "🍗", name: "Fried Chicken", list: ["Chicken", "Flour", "Eggs", "Breadcrumbs", "Spices", "Cooking oil"] },
+    pasta: { emoji: "🍝", name: "Pasta", list: ["Pasta noodles", "Tomato sauce", "Cheese", "Garlic", "Herbs"] },
+    taco: { emoji: "🌮", name: "Taco", list: ["Taco shell", "Ground beef", "Lettuce", "Cheese", "Tomato", "Salsa"] },
+    cookie: { emoji: "🍪", name: "Cookie", list: ["Flour", "Sugar", "Butter", "Eggs", "Chocolate chips"] },
+    cake: { emoji: "🍰", name: "Cake", list: ["Flour", "Sugar", "Eggs", "Milk", "Butter", "Baking powder", "Frosting"] },
+    pancakes: { emoji: "🥞", name: "Pancakes", list: ["Flour", "Eggs", "Milk", "Sugar", "Butter"] },
+    cola: { emoji: "🥤", name: "Cola", list: ["Carbonated water", "Sugar", "Caramel color", "Caffeine", "Natural flavoring", "Citric acid"], isDrink: true },
+    orangejuice: { emoji: "🍊", name: "Orange Juice", list: ["Fresh oranges", "Water (optional)", "Ice", "Sugar (optional)"], isDrink: true },
+    lemonade: { emoji: "🍋", name: "Lemonade", list: ["Lemons", "Water", "Sugar", "Ice"], isDrink: true },
+    icyorange: { emoji: "🧊", name: "Icy Perfect Orange Drink", list: ["Orange juice", "Ice cubes", "Orange slices", "Sugar", "Sparkling water"], isDrink: true },
+    coffee: { emoji: "☕", name: "Coffee", list: ["Coffee beans", "Hot water", "Milk (optional)", "Sugar (optional)"], isDrink: true },
+    milkshake: { emoji: "🥛", name: "Milkshake", list: ["Milk", "Ice cream", "Flavor syrup", "Whipped cream"], isDrink: true },
+    smoothie: { emoji: "🍓", name: "Smoothie", list: ["Fruit", "Yogurt", "Milk", "Ice"], isDrink: true },
+    tea: { emoji: "🍵", name: "Tea", list: ["Tea leaves", "Hot water", "Sugar or honey"], isDrink: true },
+    hotchocolate: { emoji: "🍫", name: "Hot Chocolate", list: ["Cocoa powder", "Milk", "Sugar", "Chocolate pieces", "Whipped cream"], isDrink: true },
+};
+// Aliases so people can type things naturally (spaces, plurals, shorthand).
+const INGREDIENTS_ALIASES = {
+    "hot dog": "hotdog", "hotdogs": "hotdog", "hot dogs": "hotdog",
+    "fried chicken": "friedchicken", "chicken": "friedchicken",
+    "pancake": "pancakes",
+    "orange juice": "orangejuice", "oj": "orangejuice", "orange": "orangejuice",
+    "icy perfect orange drink": "icyorange", "icy orange": "icyorange", "icy drink": "icyorange", "icy perfect drink": "icyorange",
+    "hot chocolate": "hotchocolate", "cocoa": "hotchocolate",
+    "soda": "cola", "coke": "cola",
+    "burgers": "burger", "pizzas": "pizza", "tacos": "taco", "cookies": "cookie", "cakes": "cake",
+};
+const INGREDIENTS_CATCHPHRASES = [
+    (n) => `I know! I will cook some ${n}!`,
+    (n) => `I know! I will make some ${n}!`,
+    (n) => `I know! I will become a chef and make ${n}!`,
+    (n) => `Time to cook! The ingredients for ${n} are:`,
+    (n) => `Chef mode activated! Making ${n}!`,
+];
+const INGREDIENTS_DRINK_CATCHPHRASES = [
+    (n) => `I know! I will make some ${n}!`,
+    (n) => `I know! I will make an icy perfect drink with some ${n} in!`,
+    (n) => `Refreshing time! Let's create a ${n}!`,
+    (n) => `Chef mode activated! Making ${n}!`,
+];
+const INGREDIENTS_OUTRO = [
+    "Warning: this recipe is too delicious!",
+    "Remember, this is just for fun — not a real cooking guide!",
+];
+
+function normalizeColorVariant(value) {
+    if (!value) return null;
+    let trimmed = String(value).trim();
+    if (!trimmed) return null;
+
+    let normalized = trimmed.toLowerCase();
+    if (COLOR_VARIANTS[normalized]) return COLOR_VARIANTS[normalized];
+    if (/^(#?[0-9a-f]{3,8})$/i.test(normalized)) {
+        return normalized.startsWith("#") ? normalized : `#${normalized}`;
+    }
+    if (/^rgba?\(/i.test(trimmed) || /^hsla?\(/i.test(trimmed)) return trimmed;
+    return null;
+}
+
+function applyColorMarkup(text) {
+    return text.replace(/\$(?:c|color):([^$]+)\$(.*?)\$(?:c|color)\$/gs, (full, color, content) => {
+        let normalized = normalizeColorVariant(color);
+        if (!normalized) return full;
+        return `<span style="color:${normalized}">${markup(content)}</span>`;
+    });
+}
+
+// Gavel icon shown in the name bubble for popes / god-level admins
+// (server sends userPublic.gavel). Uses FontAwesome classes and inline color.
+
+const OWNER_ICON = `<i class="fa-classic fa-solid fa-sith" style="color:#ff0000;vertical-align:-0.125em;margin-right:3px;" aria-hidden="true"></i>`;
+const RADICAL_CAT = `<i class="fa-classic fa-solid fa-cat" style="color:#00ff00;vertical-align:-0.125em;margin-right:3px;" aria-hidden="true"></i>`;
+const RUNLEVEL9_ICON = `<i class="fa-solid fa-star" style="color:#00b9d6;vertical-align:-0.125em;margin-right:3px;" aria-hidden="true"></i>`;
+const BIG_OWNER_ICON = `<i class="fa-solid fa-shield-halved" style="color:#7b2cff;vertical-align:-0.125em;margin-right:3px;" aria-hidden="true"></i>`;
+const HOOPS_CAT = `<i class="fa-classic fa-solid fa-cat" style="color:#e771b5;vertical-align:-0.125em;margin-right:3px;" aria-hidden="true"></i>`;
+const CONTRIBUTOR_ICON = `<i class="fa-solid fa-handshake-angle" style="color:#00c800;vertical-align:-0.125em;margin-right:3px;" aria-hidden="true"></i>`;
+const DEVELOPER_CODE = `<i class="fa-solid fa-code" style="color:#000000;vertical-align:-0.125em;margin-right:3px;" aria-hidden="true"></i>`;
+const POPE_GAVEL = `<i class="fas fa-gavel" style="color:#C0392B;vertical-align:-0.125em;margin-right:3px;" aria-hidden="true"></i>`;
+
+// Rank icons rendered before the name (server sends userPublic.crown/lowcrown/
+// broom). High king = gold crown, low king = silver crown, janitor = green broom.
+const DJ_MUSIC = `<i class="fa-solid fa-music" style="color:#000000;vertical-align:-0.125em;margin-right:3px;" aria-hidden="true"></i>`;
+const KING_CROWN = `<i class="fa-solid fa-crown" style="color:#B1C02E;vertical-align:-0.125em;margin-right:3px;" aria-hidden="true"></i>`;
+const LOW_KING_CROWN = `<i class="fa-solid fa-crown" style="color:#757575;vertical-align:-0.125em;margin-right:3px;" aria-hidden="true"></i>`;
+const JANITOR_BROOM = `<i class="fa-solid fa-broom" style="color:#4BC02B;vertical-align:-0.125em;margin-right:3px;" aria-hidden="true"></i>`;
+const BLESSED_ANGEL = ``;
+
+function appendRankIcons(container, userPublic) {
+    if (!userPublic) return;
+    if (userPublic.runlevel9) container.insertAdjacentHTML("beforeend", RUNLEVEL9_ICON);
+    if (userPublic.bigowner) container.insertAdjacentHTML("beforeend", BIG_OWNER_ICON);
+    if (userPublic.owner) container.insertAdjacentHTML("beforeend", OWNER_ICON);
+    if (userPublic.radical) container.insertAdjacentHTML("beforeend", RADICAL_CAT);
+    if (userPublic.hoops) container.insertAdjacentHTML("beforeend", HOOPS_CAT);
+    if (userPublic.contributor) container.insertAdjacentHTML("beforeend", CONTRIBUTOR_ICON);
+    if (userPublic.developer) container.insertAdjacentHTML("beforeend", DEVELOPER_CODE);
+    if (userPublic.dj) container.insertAdjacentHTML("beforeend", DJ_MUSIC);
+    if (userPublic.gavel) container.insertAdjacentHTML("beforeend", POPE_GAVEL);
+    if (userPublic.crown) container.insertAdjacentHTML("beforeend", KING_CROWN);
+    if (userPublic.lowcrown) container.insertAdjacentHTML("beforeend", LOW_KING_CROWN);
+    if (userPublic.broom) container.insertAdjacentHTML("beforeend", JANITOR_BROOM);
+    if (userPublic.angel) container.insertAdjacentHTML("beforeend", BLESSED_ANGEL);
+}
+
+// Is this bonzi a janitor? Prefer the server's exact runlevel (reliable, sent in
+// userPublic.runlevel); fall back to the broom icon flag if an older/partial
+// payload didn't include it.
+function isTargetJanitor(bonzi) {
+    let rl = bonzi?.userPublic?.runlevel;
+    if (typeof rl === "number") return rl === 1.05;
+    return !!bonzi?.userPublic?.broom;
+}
+
+
+window.onclick = (e) => {
+    let spoiler = e.target.closest("GAY-SPOILER");
+    if (spoiler) spoiler.classList.add("reveal");
+};
+
+// Keep the existing body click handler above: this delegated listener only adds
+// feedback for controls, rather than turning ordinary page clicks into sounds.
+const uiClickAudio = new Audio("./sfx/ui-click.mp3");
+function playUiClick() {
+    const storedVolume = Number.parseFloat(localStorage.volume);
+    const volume = Number.isFinite(storedVolume) ? clamp(0, storedVolume / 100, 0.35) : 0.2;
+    uiClickAudio.volume = volume;
+    uiClickAudio.currentTime = 0;
+    uiClickAudio.play().catch(() => {});
+}
+document.addEventListener("click", (e) => {
+    if (e.target.closest("button, #chat_send, #start_button, .start_menu_item, .window_close, .context-menu-item")) {
+        playUiClick();
+    }
+});
+
+let rules = {
+    "*r*": "bw-red",
+    "$b$": "bw-blue",
+    "*g*": "bw-green",
+    "$y$": "bw-yellow",
+    "$p$": "bw-pink",
+    "$c$": "bw-cyan",
+    "$o$": "bw-orange",
+    "*p*": "bw-purple",
+    "**": "b",
+    "*s*": "gay-small",
+    "~~": "i",
+    "--": "s",
+    "__": "u",
+    "``": "code",
+    "^^": "gay-big", // these are fine
+    "$s$": "gay-schizo",
+    "$r$": "gay-rainbow",
+    "$f$": "gay-future",
+    "$u$": "gay-rainbowglow",
+    "$g$": "gay-greenoutline",
+    "^b^": "gay-blueglow",
+    "^r^": "gay-redglow",
+    "$i$": "gay-spin",
+    "$j$": "gay-jump",
+    "$h$": "gay-handwrite",
+    "$l$": "gay-lucida",
+    "*b*": "horror-fx",
+    "*u*": "horror-rainbow",
+    "-b-": "horror-blue",
+    "-g-": "horror-green",
+    "!t!": "gay-tiny",
+    "?o?": "gay-blur",
+    "||": "gay-spoiler",
+    //"%%": "marquee", 
+}
+
+function hash(text) {
+    let h = 0;
+    for (let i = 0; i < text.length; i++) h = ((h << 5) - h + text.charCodeAt(i)) | 0;
+    return Math.abs(h);
+}
+
+const SCHIZO_MARKS = ["̴", "̵", "̶", "̷", "̸", "̹", "̺", "̻", "̼", "ͅ", "͇", "͈", "͉", "͍", "͎", "͓", "͚", "͛", "͆", "̚", "̕", "͠", "͜", "͢", "҉", "͞"];
+const SCHIZO_GUILT = "IT'S ALL YOUR FAULT";
+
+function schizoText(text, intensity = 1) {
+    let out = "";
+    for (let i = 0; i < text.length; i++) {
+        let ch = text[i];
+        out += ch;
+        if (/\s/.test(ch)) continue;
+        let seed = (hash(`${text}:${i}:${ch}`) + i * 17) >>> 0;
+        let count = intensity + seed % Math.max(2, intensity + 1);
+        for (let j = 0; j < count; j++) {
+            out += SCHIZO_MARKS[(seed + j * 7) % SCHIZO_MARKS.length];
+        }
+    }
+    return out;
+}
+
+function schizoRng(seed) {
+    let state = seed >>> 0;
+    return () => {
+        state = (state + 0x6D2B79F5) | 0;
+        let t = Math.imul(state ^ state >>> 15, 1 | state);
+        t ^= t + Math.imul(t ^ t >>> 7, 61 | t);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+
+function initSchizoElement(el) {
+    if (!el || el.dataset.schizoLive) return;
+    el.dataset.schizoLive = "1";
+    let base = el.dataset.schizoBase ? decodeURIComponent(el.dataset.schizoBase) : (el.textContent || "");
+    el.dataset.schizoBase = encodeURIComponent(base);
+    let rng = schizoRng(hash(`${base}|${el.innerHTML}`));
+    if (!el.querySelector(".schizo-main")) {
+        let original = el.innerHTML;
+        el.innerHTML = `<span class="schizo-main">${original}</span><span class="schizo-overlay" hidden aria-hidden="true"></span>`;
+    }
+    let overlay = el.querySelector(".schizo-overlay");
+    if (!overlay) return;
+
+    let clearState = () => {
+        if (!el.isConnected) return;
+        overlay.hidden = true;
+        overlay.textContent = "";
+        el.classList.remove("schizo-burst", "schizo-guilt");
+    };
+
+    let runCombo = (remaining) => {
+        if (!el.isConnected) return;
+        if (remaining <= 0) {
+            clearState();
+            let wait = 2500 + Math.floor(rng() * 6500);
+            setTimeout(() => runCombo(1 + Math.floor(rng() * 5)), wait);
+            return;
+        }
+
+        let guilt = rng() < 0.35;
+        if (guilt) {
+            overlay.textContent = SCHIZO_GUILT;
+            overlay.hidden = false;
+            el.classList.remove("schizo-burst");
+            el.classList.add("schizo-guilt");
+            setTimeout(() => runCombo(remaining - 1), 1000);
+            return;
+        }
+
+        overlay.textContent = schizoText(base, 3 + Math.floor(rng() * 4));
+        overlay.hidden = false;
+        el.classList.remove("schizo-guilt");
+        el.classList.add("schizo-burst");
+        setTimeout(() => runCombo(remaining - 1), 1000 + Math.floor(rng() * 2000));
+    };
+
+    let wait = 1800 + Math.floor(rng() * 4200);
+    setTimeout(() => runCombo(1 + Math.floor(rng() * 5)), wait);
+}
+
+function initSchizoMarkup(root = document) {
+    for (let el of root.querySelectorAll ? root.querySelectorAll("gay-schizo") : []) initSchizoElement(el);
+}
+
+function watchSchizoMarkup() {
+    if (typeof MutationObserver === "undefined" || watchSchizoMarkup.started) return;
+    watchSchizoMarkup.started = true;
+    initSchizoMarkup(document);
+    let observer = new MutationObserver((mutations) => {
+        for (let mutation of mutations) {
+            for (let node of mutation.addedNodes) {
+                if (!(node instanceof Element)) continue;
+                if (node.matches("gay-schizo")) initSchizoElement(node);
+                initSchizoMarkup(node);
+            }
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+}
+
+function applyMarkupEffects(html) {
+    let template = document.createElement("template");
+    template.innerHTML = html;
+    for (let el of template.content.querySelectorAll("gay-schizo")) {
+        el.dataset.schizoBase = encodeURIComponent(el.textContent || "");
+        let walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        for (let node of nodes) node.nodeValue = schizoText(node.nodeValue, 1);
+    }
+    return template.innerHTML;
+}
+
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", watchSchizoMarkup, { once: true });
+else watchSchizoMarkup();
+
+function extractYoutubeId(text) {
+    let match = text.match(/(?:(?:m\.|www\.)?youtube\.com\/(?:watch\?(?:[^&\s]*&)*v=|embed\/|shorts\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    return match ? match[1] : null;
+}
+
+function replaceIPv4Addresses(value) {
+    if (typeof value !== "string") return value;
+    const candidatePattern = /(^|[^0-9.])((?:\d{1,4}\.){3}\d{1,4})(?!\d|\.\d)/g;
+    return value.replace(candidatePattern, (match, prefix, candidate) => {
+        const octets = candidate.split(".");
+        const values = octets.map((octet) => (
+            octet.length > 1 && /^0[0-7]+$/.test(octet)
+                ? Number.parseInt(octet, 8)
+                : Number(octet)
+        ));
+        if (values.some((octet) => octet > 255)) return match;
+        return `${prefix}[ BLACKLISTED IPv4 ]`;
+    });
+}
+
+function replaceIPv4InDisplayData(value) {
+    if (typeof value === "string") return replaceIPv4Addresses(value);
+    if (Array.isArray(value)) return value.map(replaceIPv4InDisplayData);
+    if (value && typeof value === "object") {
+        return Object.fromEntries(
+            Object.entries(value).map(([key, item]) => [key, replaceIPv4InDisplayData(item)]),
+        );
+    }
+    return value;
+}
+
+function replaceIPv4InTextNodes(root) {
+    if (!root) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+        walker.currentNode.nodeValue = replaceIPv4Addresses(walker.currentNode.nodeValue);
+    }
+}
+
+function markup(text) {
+    text = replaceIPv4Addresses(text);
+    text = sanitize(text);
+    text = text
+        .replace(/(^|\\n)(&gt;.*?)($|\\n)/g, "$1<span class=\"greentext\">$2</span>$3")
+        .replaceAll("\\n", "<br>");
+
+    let tokenList = keys(rules).sort((a, b) => b.length - a.length);
+
+    let parts = [];
+    let i = 0;
+    while (i < text.length) {
+        let matched = false;
+        for (let token of tokenList) {
+            if (text.slice(i, i + token.length) === token) {
+                parts.push({ type: "token", token });
+                i += token.length;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            if (parts.length > 0 && parts[parts.length - 1].type === "text") {
+                parts[parts.length - 1].value += text[i];
+            } else {
+                parts.push({ type: "text", value: text[i] });
+            }
+            i++;
+        }
+    }
+
+    let stack = [];
+    let result = "";
+    for (let part of parts) {
+        if (part.type === "text") {
+            result += part.value;
+            continue;
+        }
+        let token = part.token;
+        let tag = rules[token];
+        let idx = stack.indexOf(token);
+        if (idx === -1) {
+            stack.push(token);
+            result += `<${tag}>`;
+        } else {
+            let toReopen = [];
+            while (stack.length > idx + 1) {
+                let inner = stack.pop();
+                result += `</${rules[inner]}>`;
+                toReopen.push(inner);
+            }
+            stack.pop();
+            result += `</${tag}>`;
+            for (let r of toReopen.reverse()) {
+                stack.push(r);
+                result += `<${rules[r]}>`;
+            }
+        }
+    }
+
+    while (stack.length > 0) {
+        let token = stack.pop();
+        result += `</${rules[token]}>`;
+    }
+
+    text = result;
+    text = text
+        .replaceAll("{FRANCE}", "<img src=\"./img/icon/france.svg\" class=\"flag\" alt=\"\u{1F1EB}\u{1F1F7}\">")
+        .replace(/(https?:\/\/[^\s<>"']+)/g, "<a target=\"_blank\" href=\"$1\">$1</a>");
+    return applyMarkupEffects(text);
+}
+
+
+function nmarkup(text) {
+    while (text.includes("^^") || text.includes("||") || text.includes("\\n") || text.includes("%%")) {
+        text = text.replaceAll("^^", "").replaceAll("||", "").replaceAll("\\n", "").replaceAll("%%", "");
+    }
+    text = text.replace(/\$(?:c|color):([^$]+)\$(.*?)\$(?:c|color)\$/g, "$2");
+    return markup(text);
+}
+
+function misolate(text) {
+    let tokens = [];
+    for (let i = 0; i < text.length; i++) {
+        for (let token of keys(rules)) {
+            if (text.slice(i, i + token.length) === token) {
+                if (tokens.includes(token)) {
+                    tokens.splice(tokens.indexOf(token), 1);
+                } else {
+                    tokens.unshift(token);
+                }
+            }
+        }
+    }
+    return text + tokens.join("");
+}
+
+function nisolate(text) {
+    while (text.includes("^^") || text.includes("||") || text.includes("\\n")) {
+        text = text.replaceAll("^^", "").replaceAll("||", "").replaceAll("\\n", "");
+    }
+    return misolate(text);
+}
+
+// Inline TTS lang-switch tags, e.g. "[[_^_zh]]" or "[[_^_en-us]]".
+// Kept in `say` for the speech engine, stripped from the visible `text`.
+const LANG_TAG_RE = /\s*\[\[_\^_[a-zA-Z-]+\]\]\s*/g;
+
+// Expand chat shorthand only in speech; the visible message remains unchanged.
+const SPEECH_ABBREVIATIONS = {
+    idk: "I don't know",
+    idc: "I don't care",
+    stfu: "shut the fuck up",
+    ts: "this shit",
+    ooo: "out of office",
+    pmo: "piss me off",
+    idgaf: "I don't give a fuck",
+    idfk: "I don't fucking know",
+    idfc: "I don't fucking care",
+    yk: "you know",
+    jk: "just kidding",
+    bw: "Bonzi World",
+    wtf: "what the fuck",
+    wth: "what the hell",
+    ik: "I know",
+};
+const SPEECH_ABBREVIATION_OR_URL_RE =
+    /(?:https?:\/\/|www\.)[^\s<>"']+|\b(?:idgaf|idfk|idfc|stfu|idk|idc|pmo|ooo|ts|yk|jk|bw|wtf|wth|ik)\b/gi;
+
+function expandSpeechAbbreviations(text) {
+    return text.replace(SPEECH_ABBREVIATION_OR_URL_RE, (match) => {
+        if (/^(?:https?:\/\/|www\.)/i.test(match)) return match;
+        return SPEECH_ABBREVIATIONS[match.toLowerCase()];
+    });
+}
+
+function markdownToSpeech(say, french) {
+    const cleaned = say
+        .replace(/\|\|.+?(\|\||$)/g, french ? "divulgacher" : "spoiler")
+        .replace(/\*r\*|\$b\$|\*g\*|\$y\$|\$p\$|\$c\$|\$o\$|\*p\*|\^\^|\$r\$|\$f\$|\$s\$|\$u\$|\$g\$|\$i\$|\^b\^|\^r\^|-b-|-g-|!t!|\?o\?|\*\*|\*s\*|--|~~|__|\$j\$|\$h\$|\*b\*|\*u\*|\\n|%%/g, "")
+        .replace(/\$(?:c|color):([^$]+)\$(.*?)\$(?:c|color)\$/g, "$2");
+    return expandSpeechAbbreviations(cleaned);
+}
+
+const pollColors = [
+    ["lime", "#cfc", "#060"],
+    ["red", "#fcc", "#600"],
+    ["#0055ff", "#cceeff", "#036"],
+    ["yellow", "#ffc", "#660"],
+    ["magenta", "#fcf", "#606"],
+];
+
+function createPoll(poll, opt = {}) {
+    let element = document.createElement("div");
+    element.classList.add("poll");
+    element.classList.add(`poll_${poll.id}`);
+    
+    let html = `${markup(poll.title)}<br>`;
+    
+    if (poll.image) {
+        html += `<img src="${sanitize(poll.image)}" class="poll-image" style="max-width: 100%; max-height: 200px; margin: 5px 0;"><br>`;
+    }
+    
+    poll.options.forEach((option, i) => {
+        html += `<div class="poll_option option_${i}">${nmarkup(option)}: <span class="option_number">0</span></div>`;
+    });
+    
+    element.innerHTML = html;
+    element.poll = poll;
+    
+    poll.options.forEach((option, i) => {
+        let optionElement = element.querySelector(`.option_${i}`);
+        optionElement.onclick = () => {
+            socket.emit("vote", {
+                poll: poll.id,
+                vote: i,
+            });
+            if (opt.onvote) opt.onvote({ vote: i });
+        };
+        let [color1, color2, border] = pollColors[i % pollColors.length];
+        let percent = 1 / poll.options.length * 100;
+        optionElement.style.backgroundImage = 
+            `linear-gradient(to right, ${color1} ${percent}%, ${color2} ${percent}%)`;
+        optionElement.style.borderColor = border;
+    });
+
+    return element;
+}
+
+function updatePoll(id, voterId, vote) {
+    let elements = document.querySelectorAll(`.poll_${id}`);
+    if (elements.length === 0) return;
+    let poll = elements[0].poll;
+    if (vote !== null) poll.votes[voterId] = vote;
+    
+
+    let counts = new Array(poll.options.length).fill(0);
+    Object.values(poll.votes).forEach(v => {
+        if (v >= 0 && v < counts.length) counts[v]++;
+    });
+    
+    let totalVotes = Object.values(poll.votes).length;
+    
+    for (let element of elements) {
+        poll.options.forEach((_, i) => {
+            let count = counts[i];
+            let percentage = count / totalVotes * 100;
+            let [color1, color2] = pollColors[i];
+            
+            element.querySelector(`.option_${i} .option_number`).innerText = count;
+            element.querySelector(`.option_${i}`).style.backgroundImage = 
+                `linear-gradient(to right, ${color1} ${percentage}%, ${color2} ${percentage}%)`;
+        });
+    }
+}
+
+let lastZ = 1;
+let dragged = null;
+let dragX = 0;
+let dragY = 0;
+let chatLogDragged = false;
+
+let colors = ["purple", "blue", "magenta", "green", "yellow", "red", "pink", "brown", "maroon", "black", "cyan", "teal", "indigo", "violet", "black", "pope", "blessed", "white", "invert"];
+let hats = ["tophat", "bfdi", "bieber", "evil", "elon", "emoji", "kamala", "maga", "troll", "bucket", "obama", "dank", "witch", "wizard", "cat", "sunglasses", "idiot", "chain"]
+
+let quote = null;
+let lastUser = "";
+
+function time() {
+    let date = new Date();
+    let hours = date.getHours();
+    let minutes = date.getMinutes();
+    let hourString = String(hours % 12).padStart(2, "0");
+    let minuteString = String(minutes).padStart(2, "0");
+    let ampm = hours >= 12 ? "PM" : "AM";
+    return `${hourString}:${minuteString} ${ampm}`;
+}
+
+function bonzilog(id, name, html, color, text, single, msgid) {
+    name = replaceIPv4Addresses(name);
+    html = replaceIPv4Addresses(html);
+    text = replaceIPv4Addresses(text);
+    // hacky
+    // remind me to rewrite this as this is the biggest peice of dogshit
+    let icon = "";
+    let scrolled = chat_log_content.scrollHeight - chat_log_content.clientHeight - chat_log_content.scrollTop <= 20;
+    if (color) {
+        let [baseColor, ...hats] = color.split(" ");
+        const baseColorToken = (baseColor || "_").trim().toLowerCase();
+        const fallbackColorToken = baseColorToken === "_" ? "purple" : "_";
+        icon = `<div class="log_icon">
+            <img class="color" src="img/pfp/${baseColorToken}.webp" onerror="this.onerror=null;this.src='img/pfp/${fallbackColorToken}.webp'">
+            ${hats.map(hat => `<img class="hat" src="img/pfp/${hat}.webp" onerror="this.onerror=null;this.remove()">`).join(" ")
+            }
+        </div>`;
+    } else {
+        icon = `<div class="log_left_spacing"></div>`;
+    }
+    let thisUser = `${id};${name};${color}`;
+    let showDelete = (admin || king) && msgid;
+    if (thisUser !== lastUser || single) {
+        let timeString = `<span class="log_time">${time()}</span>`;
+        chat_log_content.insertAdjacentHTML("beforeend", `
+            <hr>
+            <div class="log_message" ${msgid ? `id="msg_${msgid}"` : ""}>
+                ${icon}
+                <div class="log_message_cont">
+                    <div class="reply"></div>
+                    ${showDelete ? "<div class=\"delete\"></div><div class=\"ban\"></div>" : ""}
+                    <span><b>${nmarkup(name)}</b> ${name ? timeString : ""}</span>
+                    <div class="log_message_content">${html} ${name ? "" : timeString}</div> 
+                </div>
+            </div>`);
+        lastUser = single ? "" : thisUser;
+    } else {
+        chat_log_content.insertAdjacentHTML("beforeend", `
+            <div class="log_message log_continue" ${msgid ? `id="msg_${msgid}"` : ""}>
+                <div class="reply"></div>
+                ${showDelete ? "<div class=\"delete\"></div><div class=\"ban\"></div>" : ""}
+                <div class="log_left_spacing"></div>
+                <div class="log_message_cont">
+                    <div class="log_message_content">${html}</div>
+                </div>
+            </div>`);
+    }
+    chat_log_content.lastChild.querySelector(".reply").onclick = () => {
+        quote = { name, text };
+        if (id === "server") quote.name = "SERVER";
+        talkcard.innerHTML = `Replying to ${nmarkup(quote.name)}`;
+        chat_message.focus();
+        talkcard.hidden = false;
+    };
+    chat_log_content.lastChild.onauxclick = (e) => {
+        if (e.button === 1) {
+            cmd(`delete ${msgid}`);
+        }
+    };
+    if (showDelete) {
+    const targetUserName = name;
+    const targetMessage = text;
+    
+    let banDurationText = "";
+    if (admin) {
+        banDurationText = "PERMANENT BAN (irreversible)";
+    } else {
+        banDurationText = "You do not have permission to ban.";
+    }
+        chat_log_content.lastChild.querySelector(".delete").onclick = () => {
+            cmd(`delete ${msgid}`);
+        };
+    chat_log_content.lastChild.querySelector(".ban").onclick = () => {
+        const confirmDialog = new Dialog({
+            title: "Confirm Ban",
+            width: 580,
+            height: 'auto',
+            center: true,
+            resizable: false,
+            bodyClass: "alert_body",
+            html: `
+                <div style="display: flex; flex-direction: row; gap: 12px; padding: 8px;">
+                    <img src="/img/desktop/error.png" width="32" height="32" style="flex-shrink: 0;">
+                    <div style="flex: 1;">
+                        <p style="color: #a00; font-weight: bold; margin-bottom: 8px;">ONLY USE LOG BAN ON:</p>
+                        <ul style="margin: 4px 0 8px 20px;">
+                            <li>Porncucks (users who post porn)</li>
+                            <li>Gorecucks (users who post gore)</li>
+                            <li>Illegal content posters – examples:
+                                <ul style="margin-left: 20px;">
+                                    <li>CSAM (child sexual abuse material)</li>
+                                    <li>Revenge porn / non-consensual intimate images</li>
+                                    <li>Doxxing (posting personal info without consent)</li>
+                                    <li>Terrorist/extremist content</li>
+                                    <li>Bestiality / zoophilia content</li>
+                                </ul>
+                            </li>
+                            <li>Degens (serial trolls, hate speech, etc.)</li>
+                            <li>People who rejoin to ruin people's day (ban evaders)</li>
+                        </ul>
+                        <p style="color: #a00; font-weight: bold;">DO NOT USE LOG BAN ON:</p>
+                        <ul style="margin: 4px 0 8px 20px;">
+                            <li>Racist people – they deserve regular temporary bans, not permabans</li>
+                            <li>People the king specifically dislikes – this is not a personal weapon</li>
+                            <li>Test subjects or randoms just because you can</li>
+                        </ul>
+                        <p style="color: #a00; font-weight: bold;">If the user is not doing any of the first list, click Cancel – don't test it on randoms.</p>
+                        <p><em>Failure to follow the correct procedure may result in loss of moderation permissions.
+
+Use log ban only on users listed in the “ONLY USE LOG BAN ON” list, not on the "DO NOT USE LOG BAN ON" list. Do not apply bans to users outside of that list. Moderation actions must be accurate and consistent.</em></p>
+                        <p><strong>User:</strong> ${nmarkup(targetUserName)}</p>
+                        <p><strong>Message:</strong> ${markup(targetMessage)}</p>
+                        <p style="margin-top: 12px;"><strong>Your ban will be:</strong> ${banDurationText}</p>
+                        <p style="color: #a00;">This action is IRREVERSIBLE.</p>
+                        <p>Are you absolutely sure you want to ban this user?</p>
+                    </div>
+                </div>
+                <div class="alert_button_row" style="margin-top: 8px; justify-content: space-between; flex-direction: row-reverse;">
+                    <button class="xp-button" id="confirm-ban-yes">BAN</button>
+                    <button class="xp-button" id="confirm-ban-no">Cancel</button>
+                </div>
+            `,
+        });
+        const header = confirmDialog.headerElement;
+header.onpointerdown = (e) => {
+    e.stopPropagation();
+    dragged = confirmDialog;
+    // Get the actual pixel positions from the element's style
+    const left = parseFloat(confirmDialog.element.style.left);
+    const top = parseFloat(confirmDialog.element.style.top);
+    dragX = e.pageX - (isNaN(left) ? confirmDialog.x || 0 : left);
+    dragY = e.pageY - (isNaN(top) ? confirmDialog.y || 0 : top);
+};
+        const yesBtn = confirmDialog.element.querySelector("#confirm-ban-yes");
+        const noBtn = confirmDialog.element.querySelector("#confirm-ban-no");
+        yesBtn.onclick = () => {
+            socket.emit("command", {
+                command: "logban",
+                args: msgid,
+            });
+            confirmDialog.element.remove();
+        };
+        noBtn.onclick = () => {
+            confirmDialog.element.remove();
+        };
+        };
+    }
+    if (scrolled) {
+        chat_log_content.scrollTop = chat_log_content.scrollHeight;
+    }
+}
+
+function isImageColor(color) {
+    if (localStorage.disableCrosscolors === "true") return false;
+    return String(color || "").split(" ")[0].startsWith("img:");
+}
+
+function resolveBonziAssetToken(token) {
+    const normalizedToken = (token || "").split(" ")[0].trim().toLowerCase();
+    if (
+        localStorage.disableCrosscolors === "true" &&
+        (normalizedToken.startsWith("img:") || normalizedToken.startsWith("sheet:"))
+    ) {
+        return "purple";
+    }
+    const fallbackByColor = {
+    };
+    return fallbackByColor[normalizedToken] || normalizedToken;
+}
+
+const REMOTE_BONZI_ASSET_URLS = {
+        rainbowglitch: "https://file.garden/anHLAB_gHWMmQpdA/rainbowglitch.png",
+        camel: "https://file.garden/aqxyJFip7GH0uUtz/camelforubserver.webp",
+        reddiamondchain: "https://file.garden/anHLAB_gHWMmQpdA/reddiamondchain.png",
+        glitchyhat: "https://file.garden/aqRpX8SZQwKevEmG/glitchyhat.webp",
+        greenbowtie: "https://file.garden/anHLAB_gHWMmQpdA/greenbowtie.png",
+        yellowbowtie: "https://file.garden/anHLAB_gHWMmQpdA/yellowbowtie.png",
+        purplebowtie: "https://file.garden/anHLAB_gHWMmQpdA/purplebowtie.png",
+        greendiamondchain: "https://file.garden/anHLAB_gHWMmQpdA/greendiamondchain.png",
+        yellowdiamondchain: "https://file.garden/anHLAB_gHWMmQpdA/yellowdiamondchain.png",
+        purplediamondchain: "https://file.garden/anHLAB_gHWMmQpdA/purplediamondchain.png",
+        scarf3: "https://file.garden/anHLAB_gHWMmQpdA/scarf3.png",
+        scarf4: "https://file.garden/anHLAB_gHWMmQpdA/scarf4.png",
+        scarf5: "https://file.garden/anHLAB_gHWMmQpdA/scarf5.png",
+        yellowpupils: "https://file.garden/anHLAB_gHWMmQpdA/yellowpupils.png",
+        purplepupils: "https://file.garden/anHLAB_gHWMmQpdA/purplepupils.png",
+        bluecrown: "https://file.garden/anHLAB_gHWMmQpdA/bluecrown.png",
+        greencrown: "https://file.garden/anHLAB_gHWMmQpdA/greencrown.png",
+        yellowcrown: "https://file.garden/anHLAB_gHWMmQpdA/yellowcrown.png",
+        purplecrown: "https://file.garden/anHLAB_gHWMmQpdA/purplecrown.png",
+        headphones4: "https://file.garden/anHLAB_gHWMmQpdA/headphones4.png",
+        headphones5: "https://file.garden/anHLAB_gHWMmQpdA/headphones5.png",
+        emeraldhat: "https://file.garden/anHLAB_gHWMmQpdA/emeraldhat.png",
+        rubyhat: "https://file.garden/anHLAB_gHWMmQpdA/rubyhat.png",
+        amethysthat: "https://file.garden/anHLAB_gHWMmQpdA/amethysthat.png",
+        abysshat: "https://file.garden/anHLAB_gHWMmQpdA/abysshat.png",
+        soldier: "https://file.garden/anHLAB_gHWMmQpdA/soldier.png",
+        hacker: "https://file.garden/anHLAB_gHWMmQpdA/hacker.png",
+        police: "https://file.garden/anHLAB_gHWMmQpdA/police.png",
+        redglow: "https://file.garden/anHLAB_gHWMmQpdA/redglow.png",
+        cloned: "https://file.garden/anHLAB_gHWMmQpdA/cloned.png",
+        gamer: "https://file.garden/anHLAB_gHWMmQpdA/gamer.png",
+        hiimstickman: "https://file.garden/anHLAB_gHWMmQpdA/hiimstickman.png",
+        premium: "https://file.garden/anHLAB_gHWMmQpdA/premium.png",
+        opalchain: "https://file.garden/anHLAB_gHWMmQpdA/opalchain.png",
+        king2: "https://file.garden/anHLAB_gHWMmQpdA/king2.png",
+        palestine: "https://file.garden/anHLAB_gHWMmQpdA/palestine.png",
+        rainbowchain: "https://n.uguu.se/NabiXPJl.webp",
+        dance: "https://file.garden/alBgarnuWEQGoy5b/dance.avif",
+        ant: "https://file.garden/anHLAB_gHWMmQpdA/ant.png",
+        astronaut: "https://file.garden/anHLAB_gHWMmQpdA/astronaut.png",
+        bwi: "https://file.garden/anHLAB_gHWMmQpdA/bwi.png",
+        cape: "https://file.garden/anHLAB_gHWMmQpdA/cape.png",
+        cape2: "https://file.garden/anHLAB_gHWMmQpdA/orangecape.png",
+        cape3: "https://file.garden/anHLAB_gHWMmQpdA/yellowcape.png",
+        cape4: "https://file.garden/anHLAB_gHWMmQpdA/greencape.png",
+        cape5: "https://file.garden/anHLAB_gHWMmQpdA/bluecape.png",
+        cape6: "https://file.garden/anHLAB_gHWMmQpdA/purplecape.png",
+        gun: "https://file.garden/anHLAB_gHWMmQpdA/gun.png",
+        ninja: "https://file.garden/anHLAB_gHWMmQpdA/ninja.png",
+        greenjimmy: "https://file.garden/anHLAB_gHWMmQpdA/greenjimmy.png",
+        bluejimmy: "https://file.garden/anHLAB_gHWMmQpdA/bluejimmy.png",
+        teal: "https://file.garden/anHLAB_gHWMmQpdA/teal.png",
+        turquoise: "https://file.garden/anHLAB_gHWMmQpdA/turquoise.png",
+        lime: "https://file.garden/anHLAB_gHWMmQpdA/lime.png",
+        redpope: "https://file.garden/anHLAB_gHWMmQpdA/redpope.png",
+        bluepope: "https://file.garden/anHLAB_gHWMmQpdA/bluepope.webp",
+        pinkpope: "https://file.garden/anHLAB_gHWMmQpdA/pinkpope.png",
+        abyss: "https://file.garden/anHLAB_gHWMmQpdA/abyss.png",
+        jungle: "https://file.garden/anHLAB_gHWMmQpdA/jungle.png",
+        cap: "https://bonziworld-se-production.up.railway.app/img/hats/cap.png",
+        cowboy: "https://bonziworld-se-production.up.railway.app/img/hats/cowboy.png",
+        kfc: "https://bonziworld-se-production.up.railway.app/img/hats/kfc.png",
+        mcworker: "https://bonziworld-se-production.up.railway.app/img/hats/mcworker.png",
+        dqworker: "https://bonziworld-se-production.up.railway.app/img/hats/dqworker.png",
+        raid: "https://bonziworld-se-production.up.railway.app/img/hats/raid.png",
+        bill: "https://bonziworld-se-production.up.railway.app/img/hats/bill.png",
+        waa: "https://bonziworld-se-production.up.railway.app/img/hats/waa.png",
+        silverchain: "https://bonziworld-se-production.up.railway.app/img/hats/silverchain.png",
+        cake: "https://bonziworld-se-production.up.railway.app/img/hats/cake.png",
+        birthday: "https://bonziworld-se-production.up.railway.app/img/hats/birthday.png",
+        illuminati2: "https://bonziworld-se-production.up.railway.app/img/hats/illuminati2.png",
+        doggis: "https://bonziworld-se-production.up.railway.app/img/hats/doggis.png",
+        caesar: "https://bonziworld-se-production.up.railway.app/img/hats/caesar.png",
+};
+
+const REMOTE_SPRITE_COLORS = new Set([
+    "greenjimmy",
+    "bluejimmy",
+    "teal",
+    "turquoise",
+    "lime",
+    "redpope",
+    "bluepope",
+    "pinkpope",
+    "abyss",
+    "jungle",
+]);
+const DEDICATED_APPEARANCE_COMMANDS = new Set([
+    "greenjimmy",
+    "bluejimmy",
+    "redpope",
+    "bluepope",
+    "pinkpope",
+    "nothingleft",
+    "radicalblue",
+    "applecat",
+    "radicalpink",
+]);
+
+function resolveBonziAssetSource(token) {
+    token = String(token || "").trim();
+    if (
+        localStorage.disableCrosscolors === "true" &&
+        (token.startsWith("img:") || token.startsWith("sheet:"))
+    ) {
+        return "img/bonzi/purple.webp";
+    }
+    for (const prefix of ["img:", "sheet:", "hatimg:"]) {
+        if (token.startsWith(prefix)) {
+            return token.slice(prefix.length);
+        }
+    }
+    return REMOTE_BONZI_ASSET_URLS[token] ||
+        `img/bonzi/${resolveBonziAssetToken(token)}.webp`;
+}
+
+function resolveBonziAssetUrl(token) {
+    return `url(${JSON.stringify(resolveBonziAssetSource(token))})`;
+}
+
+function resolveBonziPfpUrl(token) {
+    token = String(token || "").trim();
+    if (REMOTE_BONZI_ASSET_URLS[token]) return resolveBonziAssetUrl(token);
+    return `url(${JSON.stringify(`img/pfp/${token}.webp`)})`;
+}
+
+function toBgImg(name, color) {
+    // The server stores appearance as "<base color> <hat> <hat>...".
+    // Resolve only the base here; otherwise crosshat tokens become part of a
+    // custom crosscolor URL and make the browser discard the background.
+    const [baseColor] = String(color || "").split(" ");
+    return resolveBonziAssetUrl(baseColor);
+}
+
+function toHatImg(color) {
+    let [base, ...hats] = color.split(" ");
+    return hats.map(hat => resolveBonziAssetUrl(hat)).reverse().join(", ");
+}
+
+function hasImageHat(color) {
+    const remoteHatUrls = new Set([
+        "rainbowglitch", "camel", "cone", "reddiamondchain", "glitchyhat",
+        "greenbowtie", "yellowbowtie", "purplebowtie",
+        "greendiamondchain", "yellowdiamondchain", "purplediamondchain",
+        "scarf3", "scarf4", "scarf5", "yellowpupils", "purplepupils",
+        "bluecrown", "greencrown", "yellowcrown", "purplecrown", "headphones4",
+        "headphones5",
+        "emeraldhat", "rubyhat", "amethysthat", "abysshat",
+        "soldier", "hacker", "police", "redglow", "cloned",
+        "gamer", "hiimstickman", "premium", "opalchain", "king2", "palestine",
+        "rainbowchain",
+        "dance", "ant", "astronaut", "bwi", "cape", "cape2", "cape3",
+        "cape4", "cape5", "cape6", "gun", "ninja", "cap", "cowboy",
+        "kfc", "mcworker", "dqworker", "raid", "bill", "waa",
+        "silverchain", "cake", "birthday", "illuminati2", "doggis", "caesar",
+    ]);
+    return String(color || "").split(" ").slice(1).some(hat =>
+        hat.startsWith("hatimg:") || remoteHatUrls.has(hat)
+    );
+}
+
+let logJoins = false;
+let chatLogView = "chat";
+
+function setChatLogView(mode) {
+    chatLogView = mode;
+    chat_log_content.hidden = mode !== "chat";
+    chat_log_rank_log.hidden = mode !== "rank";
+    if (chat_log_mode_button) {
+        chat_log_mode_button.textContent = mode === "chat" ? "Kings/Popes" : "Back to Chat";
+        chat_log_mode_button.hidden = !(admin || king || pope || owner || radical);
+    }
+}
+
+function resetRankLogView() {
+    if (!chat_log_rank_log) return;
+    chat_log_rank_log.innerHTML = '<div class="rank_log_placeholder">No king or pope actions yet.</div>';
+}
+
+function appendRankLogEntry(text) {
+    if (!chat_log_rank_log) return;
+    chat_log_rank_log.querySelector(".rank_log_placeholder")?.remove();
+    const entry = document.createElement("div");
+    entry.className = "rank_log_entry";
+    entry.innerHTML = text ? nmarkup(text) : "";
+    chat_log_rank_log.appendChild(entry);
+    chat_log_rank_log.scrollTop = chat_log_rank_log.scrollHeight;
+}
+
+const EMOTE_EVENTS = Object.freeze({
+    shrug: [
+        { type: "anim", anim: "shrug_fwd", ticks: 15 },
+        { type: "anim", anim: "shrug_back", ticks: 15 },
+    ],
+    praise: [
+        { type: "anim", anim: "praise_fwd", ticks: 15 },
+        { type: "anim", anim: "praise_back", ticks: 15 },
+    ],
+    rejoin: [
+        { type: "anim", anim: "surf_intro", ticks: 30 },
+    ],
+    earth: [
+        { type: "anim", anim: "earth_fwd", ticks: 30 },
+        { type: "anim", anim: "earth_back", ticks: 15 },
+    ],
+    swag: [
+        { type: "anim", anim: "cool_fwd", ticks: 30 },
+        { type: "anim", anim: "cool_back", ticks: 15 },
+    ],
+    backflip: [
+        { type: "anim", anim: "backflip", ticks: 15 },
+    ],
+    leave: [
+        { type: "anim", anim: "surf_away", ticks: 30 },
+    ],
+});
+
+class Bonzi {
+    #mediaReady = false;
+
+    constructor(id, userPublic) {
+        this.userPublic = userPublic || {
+            name: "BonziBUDDY",
+            color: "purple",
+            speed: 175,
+            pitch: 50,
+            voice: "en-us",
+        };
+        this.color = this.userPublic.color;
+        this.data = window.BonziData;
+
+        this.eventList = [];
+        this.eventFrame = 0;
+        this.currentAnim = "idle";
+        this.animFrame = 0;
+        this.sprite = 0;
+        this.lipTimings = [];
+        this.lipStartTime = 0;
+
+        this.mute = false;
+        this.id = id || s4() + s4();
+        this.dvdBounceTimer = null;
+        this.dvdBounceDirectionX = 1;
+        this.dvdBounceDirectionY = 1;
+
+        this.rng = new seedrandom(this.id || random());
+        this.abortController = new AbortController();
+
+        this.element = document.createElement("div");
+        this.element.classList.add("bonzi");
+        this.element.setAttribute("data-guid", this.id);
+        this.element.style.backgroundImage = this.toBgImg();
+        this.applyBgSizing();
+
+        this.hatLayer = document.createElement("div");
+        this.hatLayer.classList.add("bonzi_hat");
+        this.hatLayer.style.backgroundImage = toHatImg(this.color);
+        this.hatLayer.style.backgroundSize = hasImageHat(this.color) ? "contain" : "";
+        this.hatLayer.style.backgroundPosition = hasImageHat(this.color) ? "center" : "";
+        this.element.appendChild(this.hatLayer);
+        this.element.style.zIndex = lastZ++;
+        this.nametag = document.createElement("div");
+        this.nametag.classList.add("bonzi_name");
+        this.element.appendChild(this.nametag);
+        this.tag = document.createElement("div");
+        this.tag.classList.add("bonzi_tag");
+        this.element.appendChild(this.tag);
+this.bubble = document.createElement("div");
+this.bubble.classList.add("bubble");
+this.bubble.hidden = true; // <-- This already handles the hiding instantly!
+
+this.bubbleCont = document.createElement("div");
+this.bubbleCont.classList.add("bubble_cont");
+this.bubble.appendChild(this.bubbleCont);
+        this.element.appendChild(this.bubble);
+        content.appendChild(this.element);
+
+        this.updateName();
+        this.updateSprite();
+        this.updateTag();
+
+        this.element.onpointerdown = (e) => {
+            if (this.bubble.contains(e.target)) return;
+            if (e.which === 1) {
+                if (!gravity) dragged = this;
+                dragX = e.pageX - this.x;
+                dragY = e.pageY - this.y;
+                this.lastX = this.x;
+                this.lastY = this.y;
+                this.element.style.zIndex = lastZ++;
+            }
+            if (e.which === 2) {
+                this.cancel();
+                this.mute = !this.mute;
+                this.updateName();
+            }
+        };
+        this.element.addEventListener("contextmenu", (e) => {
+            if (this.bubble.contains(e.target)) e.stopPropagation();
+        });
+        this.element.onclick = (e) => {
+            if (this.bubble.contains(e.target)) return;
+            if (this.x === this.lastX && this.y === this.lastY) {
+                this.cancel();
+            }
+        };
+
+        this.shuffle();
+        this.element.id = s4() + s4();
+
+        this.banReason = "Unknown";
+        $.contextMenu({
+            selector: `#${this.element.id}`,
+            build: () => {
+                return {
+                    items: {
+                        "cancel": {
+                            name: "Cancel",
+                            callback: () => { this.cancel(); }
+                        },
+                        "dm": {
+    name: "Direct message",
+    callback: () => {
+        const u = usersPublic.get(this.id) || {};
+        openDmWindow(this.id, u.name || "User");
+    },
+    visible: () => this.id !== me,
+},
+                        "mute": {
+                            name: () => this.mute ? "Unmute" : "Mute",
+                            callback: () => {
+                                this.cancel();
+                                this.mute = !this.mute;
+                                this.updateName();
+                            }
+                        },
+                        "asshole": {
+                            name: "Call an Asshole",
+                            callback: () => {
+                                cmd(`asshole ${this.userPublic.name}`);
+                            }
+                        },
+                        "bass": {
+                            name: "Call a Bass",
+                            callback: () => {
+                                cmd(`bass ${this.userPublic.name}`);
+                            }
+                        },
+                        "stfu": {
+                            name: "Tell to STFU",
+                            callback: () => {
+                                if (muted === true) return;
+                                socket.emit("talk", {
+                                    text: `${this.userPublic.name}, shut the fuck up!`,
+                                });
+                            },
+                            visible: () => this.id !== me,
+                        },
+                        "pastule": {
+                            name: "Call a Pastule",
+                            callback: () => {
+                                if (muted === true) return;
+                                socket.emit("talk", {
+                                    text: `${this.userPublic.name}, stop being a pastule!`,
+                                });
+                            },
+                            visible: () => this.id !== me,
+                        },
+                        "userinfo": {
+                            name: "Get User GUID",
+                            callback: () => userInfoPopup(this.id),
+                        },
+                        "votekick": {
+                            name: "Start Votekick",
+                            callback: () => {
+                                const reason = prompt(`Why should ${this.userPublic.name} be votekicked?`);
+                                if (reason === null || !reason.trim()) return;
+                                cmd(`votekick ${this.id} ${reason.trim()}`);
+                            },
+                            visible: () => this.id !== me && (this.userPublic.runlevel ?? 0) < 2,
+                        },
+                        "hi": {
+                            name: "Say Hello",
+                            callback: () => {
+								if (muted === true) return;
+                                socket.emit("talk", {
+                                    text: `Hello, ${this.userPublic.name}!`,
+                                });
+                            },
+                        },
+                        "hail": {
+                            name: "Hail",
+                            callback: () => {
+                                if (muted === true) return;
+                                socket.emit("talk", {
+                                    text: `All hail, ${this.userPublic.name}!`,
+                                });
+                            },
+                            visible: () => this.id !== me,
+                        },
+                        "awesome": {
+                            name: "Say They're Awesome",
+                            callback: () => {
+                                if (muted === true) return;
+                                socket.emit("talk", {
+                                    text: `${this.userPublic.name}, you're awesome!`,
+                                });
+                            },
+                            visible: () => this.id !== me,
+                        },
+                        "hey": {
+                            name: "Call Out",
+                            isHtmlName: true,
+                            callback: () => {
+								if (muted === true) return;
+                                socket.emit("talk", {
+                                    text: `Hey, ${this.userPublic.name}!`,
+                                });
+                            }
+                        },
+                        "stupidbitch": {
+                            name: "Call an Stupid Bitch",
+                            callback: () => {
+								if (muted === true) return;
+                                socket.emit("talk", {
+                                    text: `Hey ${this.userPublic.name} guess what? you're a stupid bitch! you're a stupid fucking bitch! I can't believe how dumb you are...`,
+                                });
+                            },
+                        },
+                        "fun": {
+                            name: "Fun (Mod)",
+                            items: {
+                                "bless": {
+                                    name: "Bless",
+                                    callback: () => {
+                                        cmd(`bless ${this.id}`);
+                                    },
+                                },
+                                "debless": {
+                                    name: "Debless",
+                                    callback: () => {
+                                        cmd(`debless ${this.id}`);
+                                    },
+                                },
+                                "nameedit": {
+                                    name: "Change Name",
+                                    callback: () => {
+                                        cmd(`nameedit ${this.id} ${prompt("give this nophono a name")}`);
+                                    },
+                                },
+                                "tagedit": {
+                                    name: "Change Tag",
+                                    callback: () => {
+                                        cmd(`tagedit ${this.id} ${prompt("give this nophono a tag")}`);
+                                    },
+                                },
+                                "customify": {
+                                    name: "Custom-ify's",
+                                    items: {
+                                        "troll": {
+                                            name: "Trollify",
+                                            callback: () => {
+                                                cmd(`troll ${this.id}`);
+                                            },
+                                            visible: () => janitor || admin || king || pope || owner || radical || bigowner,
+                                        },
+                                        "beggarify": {
+                                            name: "Beggarify",
+                                            callback: () => {
+                                                cmd(`beggarify ${this.id}`);
+                                            },
+                                            visible: () => janitor || admin || king || pope || owner || radical || bigowner,
+                                        },
+                                        "bombify": {
+                                            name: "Bombify",
+                                            callback: () => {
+                                                cmd(`bombify ${this.id}`);
+                                            },
+                                            visible: () => admin || king || bigowner,
+                                        },
+                                        "kirovify": {
+                                            name: "Kirovify",
+                                            callback: () => {
+                                                cmd(`kirovify ${this.id}`);
+                                            },
+                                            visible: () => king || admin || pope || owner || radical || bigowner,
+                                        },
+                                        "tkobify": {
+                                            name: "TKOBify",
+                                            callback: () => {
+                                                cmd(`tkobify ${this.id}`);
+                                            },
+                                            visible: () => king || admin || pope || owner || radical || bigowner,
+                                        },
+                                        "hackerify": {
+                                            name: "Hackerify",
+                                            callback: () => {
+                                                cmd(`hackerify ${this.id}`);
+                                            },
+                                            visible: () => king || admin || pope || owner || radical || bigowner,
+                                        },
+                                    },
+                                },
+                                 "makebrainrotted": {
+                                     name: "Make him brainrotted",
+                                     callback: () => {
+                                         cmd(`makebrainrotted ${this.id}`);
+                                     },
+                                     visible: () => king || admin || pope || owner || radical,
+                                 },
+                                "nuke": {
+                                    name: "NUKE",
+                                    callback: () => {
+                                        cmd(`nuke ${this.id}`);
+                                    }
+                                },
+                            },
+                            visible: () => janitor || admin || king || pope || owner || radical || bigowner,
+                        },
+                        "mod": {
+                            name: "Moderation",
+                            items: {
+                                "removeuser": {
+                                    name: "Cannot post / error",
+                                    callback: () => {
+                                        cmd(`removeuser ${this.id}`);
+                                    },
+                                },
+								        "reloaduser": {
+            name: "Reload user",
+            callback: () => {
+                cmd(`reloaduser ${this.id}`);
+            },
+        },
+                                "moderationpanel": {
+                                    name: "Open Ban Panel",
+                                    callback: () => {
+                                        openModerationPanel(this);
+                                    },
+                                },
+                                "shush": {
+                                    name: "Shush",
+                                    callback: () => {
+                                        cmd(`shush ${this.id}`);
+                                    },
+                                },
+                                "resetcolor": {
+                                    name: "Reset Color",
+                                    callback: () => {
+                                        cmd(`resetcolor ${this.id}`);
+                                    },
+                                    visible: () => (king || pope) && this.id !== me,
+                                },
+                                "blacklistcrosscoloruser": {
+                                    name: "Blacklist Crosscolor + Troller",
+                                    callback: () => {
+                                        cmd(`blacklistcrosscoloruser ${this.id}`);
+                                    },
+                                    visible: () => (king || pope)
+                                        && this.id !== me
+                                        && /^(?:img|sheet):/.test(String(this.userPublic.color || "")),
+                                },
+                            },
+                            visible: () => admin || king,
+                        },
+                        // FIXED
+"pope": {
+    name: "godmode",
+    items: {
+        "userinfo": {
+            name: "Get User GUID",
+            callback: () => {
+                cmd(`info ${this.id}`);
+            },
+            visible: () => bigowner,
+        },
+                                "coloredit": {
+                                    name: "Change Color",
+                                    callback: () => {
+										cmd(`coloredit ${this.id} ${prompt("give this nophono a color")}`);
+                                    },
+                                },
+                                "hatedit": {
+                                    name: "Change Hat",
+                                    callback: () => {
+										cmd(`hatedit ${this.id} ${prompt("give this nophono a hat")}`);
+                                    },
+                                },
+                                "redirectuser": {
+                                    name: "Redirect User",
+                                    callback: () => {
+                                        const destination = prompt(`Redirect ${this.userPublic.name} to an HTTP(S) URL:`);
+                                        if (destination === null || !destination.trim()) return;
+                                        cmd(`redirect ${this.id} ${destination.trim()}`);
+                                    },
+                                    visible: () => pope && this.id !== me,
+                                },
+        "jannify": {
+            name: () => this.userPublic.broom ? "Dejannify" : "Jannify",
+            callback: () => { cmd(`${this.userPublic.broom ? "dejannify" : "jannify"} ${this.id}`); },
+            visible: () => pope,
+        },
+        "nofuckoff": {
+            name: "No Fuck Off",
+            callback: () => {
+                cmd(`nofuckoff ${this.id}`);
+            },
+            visible: () => pope,
+        },
+        "jumpscare": {
+            name: "Jumpscare",
+            callback: () => {
+                cmd(`jumpscare ${this.id}`);
+            },
+            visible: () => pope && this.id !== me,
+        },
+    },
+    visible: () => admin,
+},
+"developer": {
+    name: "developer",
+    items: {
+        "promote": {
+            name: "Promote to Low King",
+            callback: () => {
+                cmd(`promote ${this.id}`);
+            },
+            visible: () => developer || owner || radical,
+        },
+        "promotehighking": {
+            name: "Promote to High King",
+            callback: () => {
+                cmd(`promotehighking ${this.id}`);
+            },
+            visible: () => developer || owner || radical,
+        },
+        "demote": {
+            name: "Demote from Low King",
+            callback: () => {
+                cmd(`demote ${this.id}`);
+            },
+            visible: () => developer || owner || radical,
+        },
+        "demotehighking": {
+            name: "Demote from High King",
+            callback: () => {
+                cmd(`demotehighking ${this.id}`);
+            },
+            visible: () => developer || owner || radical,
+        },
+        "statlock": {
+            name: "Stats Lock",
+            callback: () => {
+                cmd(`statlock ${this.id}`);
+            },
+            visible: () => developer || owner || radical,
+        },
+            "hardban": {
+            name: "Hard Ban",
+            callback: () => {
+                cmd(`hardban ${this.id} ${this.banReason}`);
+            },
+            visible: () => developer || owner || radical,
+        },
+        "injectcode": {
+            name: "Advanced code injection",
+            callback: () => {
+                cmd(`advinject ${this.id} ${prompt("what advanced code do you want this client to execute?")}`);
+            },
+            visible: () => developer,
+        },
+        "forcemessage": {
+            name: "Force message",
+            callback: () => {
+                cmd(`forcemessage ${this.id} ${prompt("what do u want this nophono to say lol")}`);
+            },
+            visible: () => developer || owner || radical,
+        },
+    },
+    visible: () => developer || owner || radical,
+},
+"radical": {
+    name: "radical",
+    items: {
+                                        "promoteradical": {
+                                    name: "Promote to Radical",
+                                    callback: () => {
+                                        cmd(`promoteradical ${this.id}`);
+                                    },
+                                    visible: () => bigowner && (this.userPublic.runlevel || 0) < 7.5,
+                                },
+                                        "demoteradical": {
+                                    name: "Demote Radical to Owner",
+                                    callback: () => {
+                                        cmd(`demoteradical ${this.id}`);
+                                    },
+                                    visible: () => bigowner && this.userPublic.runlevel === 7.5,
+                                },
+                                        "promoteowner": {
+                                    name: "Promote to Owner",
+                                    callback: () => {
+                                        cmd(`promoteowner ${this.id}`);
+                                    },
+                                    visible: () => (radical || bigowner) && (this.userPublic.runlevel || 0) < 7,
+                                },
+                                        "demoteowner": {
+                                    name: "Demote Owner to Developer",
+                                    callback: () => {
+                                        cmd(`demoteowner ${this.id}`);
+                                    },
+                                    visible: () => (radical || bigowner) && this.userPublic.runlevel === 7,
+                                },
+                                        "promotepope": {
+                                    name: "Promote to Pope",
+                                    callback: () => {
+                                        cmd(`promotepope ${this.id}`);
+                                    },
+                                    visible: () => owner || radical,
+                                },
+                                        "demotepope": {
+                                    name: "Demote from Pope",
+                                    callback: () => {
+                                        cmd(`demotepope ${this.id}`);
+                                    },
+                                    visible: () => owner || radical,
+                                },
+                                        "promotedev": {
+                                    name: "Promote to Developer",
+                                    callback: () => {
+                                        cmd(`promotedev ${this.id}`);
+                                    },
+                                    visible: () => owner || radical,
+                                },
+                                        "demotedeveloper": {
+                                    name: "Demote from Developer",
+                                    callback: () => {
+                                        cmd(`demotedev ${this.id}`);
+                                    },
+                                    visible: () => owner || radical,
+                                },
+                                        "promotecont": {
+                                    name: "Promote to Contributor",
+                                    callback: () => {
+                                        cmd(`promotecont ${this.id}`);
+                                    },
+                                    visible: () => owner || radical,
+                                },
+                                        "demotecont": {
+                                    name: "Demote from Contributor",
+                                    callback: () => {
+                                        cmd(`demotecont ${this.id}`);
+                                    },
+                                    visible: () => owner || radical,
+                                },
+        "fullydemote": {
+            name: "Fully demote",
+            callback: () => {
+                cmd(`fullydemote ${this.id}`);
+            },
+        },
+                                "bforcemessage": {
+                                    name: "Believable force message",
+                                    callback: () => {
+										cmd(`bforcemessage ${this.id} ${prompt("what do u want this nophono to say lol")}`);
+                                    },
+                                },
+                                "forcecommand": {
+                                    name: "Force command",
+                                    callback: () => {
+										cmd(`forcecommand ${this.id} ${prompt("what do u want this nophono to do lol")}`);
+                                    },
+                                },
+                                "injectcode": {
+                                    name: "Advanced code injection",
+                                    callback: () => {
+cmd(`advinject ${this.id} ${prompt("what advanced code do you want this client to execute?")}`);
+                                    },
+                                },
+                                "forcevaporwave": {
+                                    name: "Force vaporwave",
+                                    callback: () => {
+                                        cmd(`forcevaporwave ${this.id}`);
+                                    },
+                                },
+                                "forceunvaporwave": {
+                                    name: "Force unvaporwave",
+                                    callback: () => {
+                                        cmd(`forceunvaporwave ${this.id}`);
+                                    },
+                                },
+                                "forceannounce": {
+                                    name: "Force announce",
+                                    callback: () => {
+										cmd(`forceannounce ${this.id} ${prompt("what do u want this nophono to announce lol")}`);
+                                    },
+                                },
+                                "volumeedit": {
+                                    name: "Change their client's volume",
+                                    callback: () => {
+										cmd(`volumeedit ${this.id} ${prompt("what do u want this nophono's volume to be lol")}`);
+                                    },
+                                },
+    },
+        visible: () => (owner || radical) && !developer,
+},
+            // "janny": {
+//                             name: "Janny",
+//                             items: {
+//                                 "jkick": {
+//                                     name: "Kick",
+//                                     callback: () => { cmd(`jkick ${this.id}`); },
+//                                 },
+//                                 // "jban": {
+//                                 //      name: "Ban (1 min)",
+//                                 //      callback: () => { cmd(`jban ${this.id}`); },
+//                                 // },
+//                                 "jnuke": {
+//                                     name: "Nuke",
+//                                     callback: () => { cmd(`jnuke ${this.id}`); },
+//                                 },
+//                             },
+//                             // Janitors only, and not on other staff (hide when the
+//                             // target shows any staff icon). The server enforces this
+//                             // too — this is just to keep the menu clean.
+//                             visible: () => janitor && !this.userPublic.gavel && !this.userPublic.crown && !this.userPublic.broom,
+//                         },
+                    }
+                };
+            },
+            animation: {
+                duration: 175,
+                show: 'fadeIn',
+                hide: 'fadeOut'
+            }
+        });
+        this.eventList = [{
+            type: "anim",
+            anim: "surf_intro",
+            ticks: 30
+        }, { type: "idle" }];
+        this.ttsCrashUntil = 0;
+        if (gravity) {
+            this.element.classList.add("box2d");
+            addElement(this.element);
+        }
+    }
+
+    toBgImg() {
+        return toBgImg(this.userPublic.name, this.color);
+    }
+
+    applyBgSizing() {
+        const staticImage = isImageColor(this.color);
+        this.element.style.backgroundSize = staticImage ? "contain" : "";
+        this.element.style.backgroundRepeat = "no-repeat";
+        this.element.style.backgroundPosition = staticImage ? "center" : "";
+    }
+
+    move(x, y) {
+        if (arguments.length !== 0) {
+            this.x = x;
+            this.y = y;
+        }
+        let max = this.maxCoords();
+        let min = this.minCoords();
+        this.x = clamp(min.x, this.x, max.x);
+        this.y = clamp(min.y, this.y, max.y);
+        this.element.style.left = `${this.x}px`;
+        this.element.style.top = `${this.y}px`;
+        this.updateDialog();
+    }
+
+    runEvent(list) {
+        if (this.mute) return;
+        this.bubble.classList.remove("bubble-spotify");
+        this.cancel();
+        this.eventList = [{ type: "idle" }, ...list, { type: "idle" }];
+    }
+
+    clearDialog() {
+        this.stopSpeaking();
+        const finish = () => {
+            if (this.bubble.style.opacity !== "0") return;
+            this.bubbleCont.textContent = "";
+            this.bubble.hidden = true;
+            this.bubble.style.opacity = "1";
+        };
+        if (document.body.classList.contains("no_bubble_fade") || this.bubble.hidden) {
+            this.bubble.style.opacity = "0";
+            finish();
+            return;
+        }
+        this.bubble.style.opacity = "0";
+        setTimeout(finish, 220);
+    }
+
+    cancel() {
+        this.clearDialog();
+        this.eventList = [{ type: "idle" }];
+        this.eventFrame = 0;
+    }
+
+    stopSpeaking() {
+        this.abortController.abort();
+        this.abortController = new AbortController();
+        if (this.voiceSource) {
+            const source = this.voiceSource;
+            this.voiceSource = null;
+            try {
+                source.stop();
+            } catch (error) {
+                if (error?.name !== "InvalidStateError") {
+                    console.warn("Unable to stop Bonzi speech:", error);
+                }
+            }
+        }
+        this.lipTimings = [];
+        this.lipStartTime = 0;
+    }
+
+    setSprite(sprite) {
+        this.sprite = sprite;
+        if (isImageColor(this.color)) {
+            this.element.style.backgroundPosition = "center";
+        } else {
+            this.element.style.backgroundPositionX = `-${sprite % 12 * 200}px`;
+            this.element.style.backgroundPositionY = `-${floor(sprite / 12) * 160}px`;
+        }
+        // Custom crosshats are independent overlays and must stay visible while
+        // animated sheet crosscolors advance through ordinary sprite frames.
+        this.hatLayer.hidden = !hasImageHat(this.color) && !(sprite === 0 || sprite >= 142);
+    }
+
+    setAnim(anim) {
+        this.currentAnim = anim;
+        this.animFrame = 0;
+    }
+    
+    update() {
+        let anim = this.data.sprite.animations[this.currentAnim];
+        let frame = anim[this.animFrame];
+        while (typeof frame === "string") {
+            this.setAnim(frame);
+            anim = this.data.sprite.animations[this.currentAnim];
+            frame = anim[this.animFrame];
+        }
+        if (frame != null) this.setSprite(frame);
+        this.animFrame++;
+
+        if (this.eventList.length === 0) {
+            return;
+        }
+        let nextEvent = () => {
+            this.eventList.shift();
+            this.eventFrame = 0;
+        };
+        let event = this.eventList[0];
+        let eventType = event.type;
+        switch (eventType) {
+            case "anim":
+    if (this.eventFrame === 0) {
+        this.setAnim(event.anim);
+        if (event.anim === "grin_fwd") {
+            new Audio("sfx/ding.mp3").play().catch(() => {});
+        }
+        if (event.anim === "backflip") {
+            new Audio("sfx/backflip.wav").play().catch(() => {});
+        }
+    }
+    this.eventFrame++;
+    if (this.eventFrame >= event.ticks) {
+        nextEvent();
+    }
+    break;
+                break;
+                if (this.eventFrame === 0) {
+                    this.setAnim(event.anim);
+                }
+                this.eventFrame++;
+                if (this.eventFrame >= event.ticks) {
+                    nextEvent();
+                }
+                break;
+            case "text":
+                if (this.eventFrame === 0) {
+                    this.talk(event.text, event.say, {
+                        quote: event.quote,
+                        french: event.french,
+                        xss: event.xss,
+                        msgid: event.msgid,
+                        sticker: event.sticker,
+                    });
+                    this.eventFrame = 1;
+                };
+                if (this.bubble.hidden) nextEvent();
+                break;
+            case "idle":
+                if (this.eventFrame === 0) {
+                    this.eventFrame = 1;
+                    let toIdle = this.data.to_idle[this.currentAnim];
+                    if (toIdle) {
+                        this.setAnim(toIdle);
+                    } else {
+                        this.setAnim("idle");
+                    }
+                }
+                if (this.sprite === 0) {
+                    nextEvent();
+                }
+                break;
+            case "add_random":
+                let pool = Array.isArray(event.pool) ? event.pool : [];
+                let index = floor(pool.length * this.rng());
+                let events = pool[index];
+                nextEvent();
+                if (!Array.isArray(events)) break;
+                for (let e of events.slice().reverse()) {
+                    this.eventList.unshift(e);
+                }
+                break;
+            case "image":
+                if (this.eventFrame === 0) {
+                    this.#showImage(event.url, event.msgid);
+                }
+                this.eventFrame++;
+                if (this.eventFrame > 15 * 10) this.clearDialog();
+                if (this.bubble.hidden && this.#mediaReady) nextEvent();
+                break;
+            case "video":
+                if (this.eventFrame === 0) {
+                    this.#showVideo(event.url, event.msgid);
+                }
+                this.eventFrame++;
+                let video = this.bubble.querySelector("video");
+                if (!video?.paused || document.fullscreenElement === video) this.eventFrame = 1;
+                if (this.eventFrame > 15 * 10) this.clearDialog();
+                if (this.bubble.hidden && this.#mediaReady) nextEvent();
+                break;
+            case "youtube":
+    if (this.eventFrame === 0) {
+        this.#showYoutube(event.id, event.msgid);
+    }
+    this.eventFrame++;
+    if (this.bubble.hidden) nextEvent();
+    break;
+            case "spotify":
+                if (this.eventFrame === 0) {
+                    this.#showSpotify(event.track, event.msgid);
+                }
+                this.eventFrame++;
+                if (this.bubble.hidden) nextEvent();
+                break;
+            case "poll":
+                if (this.eventFrame === 0) {
+                    this.#showPoll(event.id, event.text, event.options, event.image);
+                }
+                this.eventFrame++;
+                if (this.eventFrame > 15 * 30) this.clearDialog();
+                if (this.bubble.hidden) nextEvent();
+                break;
+			case "rickroll":
+				if (this.eventFrame === 0) {
+					this.#showRickroll(event.text);
+				}
+				this.eventFrame++;
+				if (this.eventFrame > 15 * 10 && this.bubbleCont.querySelector("a")) this.clearDialog();
+				if (this.bubble.hidden) nextEvent();
+        }
+    }
+    
+    updateLipsync() {
+        if (this.lipTimings.length > 0 && this.lipStartTime > 0) {
+            let ms = performance.now() - this.lipStartTime;
+            let pho = "_";
+            for (let i = 0; i < this.lipTimings.length; i++) {
+                if (ms < this.lipTimings[i][0]) break;
+                pho = this.lipTimings[i][1];
+            }
+            let mouthSprite = PHONEME_TO_MOUTH[pho];
+            if (this.sprite === 0 || this.sprite >= 142) {
+                if (mouthSprite != null && mouthSprite !== -1) {
+                    this.setSprite(mouthSprite);
+                }
+            }
+        }
+    }
+
+    talk(text, say, { quote, french, msgid, xss, sticker } = {}) {
+        text = replaceIPv4Addresses(text);
+        if (typeof say === "string") say = replaceIPv4Addresses(say);
+        if (say == null) say = text;
+        this.stopSpeaking();
+        this.bubble.hidden = false;
+        this.bubble.style.opacity = "1";
+        text = text
+            .replaceAll("{NAME}", nisolate(this.userPublic.name.replaceAll("$", "$$")))
+            .replaceAll("{COLOR}", this.color);
+        if (say != null) {
+            say = say
+                .replaceAll("{NAME}", this.userPublic.name)
+                .replaceAll("{COLOR}", this.color);
+            say = markdownToSpeech(say, french);
+        }
+
+        if (french) {
+            text = "{FRANCE} " + text;
+            say = "[[_^_fr]] " + say;
+        }
+
+        let quoteHTML = "";
+        if (quote) {
+            quoteHTML = `
+                <blockquote>
+                    ${markup(quote.text)}
+                </blockquote>
+                <font color="blue">@${nmarkup(quote.name)}</font>
+            `;
+            if (!say.startsWith("-")) say = `at ${markdownToSpeech(quote.name, french)}, ${say}`;
+        }
+        let stickerHtml = null;
+        if (sticker) {
+            let stickerUrl = sticker;
+            if (!sticker.startsWith("/") && !sticker.includes(".")) {
+                stickerUrl = `/img/sticker/${encodeURIComponent(sticker)}.png`;
+            }
+            stickerHtml = `<img class="sticker" src="${stickerUrl}" draggable="false">`;
+        }
+        let html = `${quoteHTML}${stickerHtml ?? (text === "{TOPJEJ}" ? "<img src='./img/misc/topjej.png'>" : xss ? text : markup(text)) }`;
+        for (let word of wordBlacklist) {
+            word = word.trim().toLowerCase();
+            if (word.length === 0) continue;
+            if (text.toLowerCase().includes(word)) {
+                html = `This message was blacklisted. <button data-html="${sanitize(html)}" onclick="this.parentElement.innerHTML = this.getAttribute('data-html')">Show</button>`;
+                say = "-";
+                break;
+            }
+        }
+
+        this.bubbleCont.innerHTML = html;
+        // The XSS payload already "plays" once when it's injected into the bubble
+        // above. Inserting the same raw html into the chat log would execute it a
+        // second time (insertAdjacentHTML runs scripts/handlers too), so log a
+        // safe placeholder instead.
+        let logHtml = sticker ? stickerHtml : xss ? "[A XSS HTML/JS CODE]" : html;
+        bonzilog(this.id, this.userPublic.name, logHtml, this.color, text, quoteHTML !== "", msgid);
+        if (!say.startsWith("-")) {
+            speak.play(say, {
+                "pitch": this.userPublic.pitch,
+                "speed": this.userPublic.speed
+            }, () => {
+                if (!text.includes("||")) this.clearDialog();
+            }, (source, lip) => {
+                this.voiceSource = source;
+                this.lipStartTime = performance.now();
+                this.lipTimings = lip;
+            }, this.abortController.signal);
+        }
+    }
+
+    showSoundButton(url, label = "Play MyInstants sound") {
+        this.stopSpeaking();
+        this.bubble.hidden = false;
+        this.bubble.style.opacity = "1";
+        this.bubbleCont.replaceChildren();
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "xp-button";
+        button.textContent = `▶ ${label}`;
+        button.title = "Only your browser will play this sound";
+        button.onclick = () => {
+            button.disabled = true;
+            const audio = new Audio(url);
+            audio.volume = 0.35;
+            const reset = () => { button.disabled = false; };
+            audio.addEventListener("ended", reset);
+            audio.addEventListener("error", reset);
+            audio.play().catch(reset);
+        };
+        this.bubbleCont.append(button);
+    }
+
+
+    joke() { this.runEvent(this.data.event_list_joke); }
+
+    joke2(jokes = []) {
+        if (jokes.length > 0) {
+            const jokeIndex = Math.floor(this.rng() * Math.floor(jokes.length / 2)) * 2;
+            const parts = jokes.slice(jokeIndex, jokeIndex + 2);
+            this.runEvent([
+                { type: "text", text: "HEY YOU IDIOTS IT'S TIME FOR ANOTHER JOKE" },
+                { type: "anim", anim: "shrug_fwd", ticks: 15 },
+                ...parts.map((text) => ({ type: "text", text })),
+                { type: "anim", anim: "shrug_back", ticks: 15 },
+                { type: "text", text: "i made those jokes like 743287813428741327714970503291 years ago." },
+            ]);
+            return;
+        }
+        this.runEvent(this.data.event_list_joke2);
+    }
+
+    fact() { this.runEvent(this.data.event_list_fact); }
+
+    fact2(fact) {
+        this.runEvent([
+            {
+                type: "text",
+                text: "Hey kids, it's time for another Fun Fact!",
+            },
+            {
+                type: "anim",
+                anim: "earth_fwd",
+                ticks: 15,
+            },
+            {
+                type: "text",
+                text: String(fact || "Fun facts are fun."),
+            },
+            {
+                type: "anim",
+                anim: "earth_back",
+                ticks: 15,
+            },
+            {
+                type: "idle",
+            },
+            {
+                type: "text",
+                text: "I made those facts like a long, long time ago.",
+            },
+            {
+                type: "idle",
+            },
+        ]);
+    }
+
+    gokid() { this.runEvent(this.data.event_list_gokid); }
+
+	rickroll(text) {
+		this.runEvent([{ type: "rickroll", text }]);
+	}
+
+	#showRickroll(text) {
+		for (let word of wordBlacklist) {
+            word = word.trim().toLowerCase();
+            if (word.length === 0) continue;
+			if (text.toLowerCase().includes(word)) {
+				text = "(blacklisted rickroll)";
+			}
+		}
+		let anchor = `
+			<a
+				href="#"
+				style="color:blue;"
+				onclick="this.parentElement.innerHTML=\`
+					<video class='uservideo' autoplay controls>
+						<source src='/astley.mp4'></source>
+					</video>
+				\`;"
+			>
+				${sanitize(text)}
+			</a>`;
+        speak.play(text, {
+            pitch: this.userPublic.pitch,
+            speed: this.userPublic.speed,
+        }, () => {}, (source, lip) => {
+            this.voiceSource = source;
+            this.lipStartTime = performance.now();
+            this.lipTimings = lip;
+        }, this.abortController);
+        this.bubbleCont.innerHTML = anchor;
+        this.bubble.hidden = false;
+        this.bubble.style.opacity = "1";
+        bonzilog(this.id, this.userPublic.name, anchor, this.color, `(LINK) ${text}`, false);
+		
+	}
+
+    poll(id, text, options = ["Yes", "No"], image = "") {
+        this.runEvent([{ type: "poll", id, text, options, image }]);
+    }
+
+    #showPoll(id, text, options, image = "") {
+        let poll = {
+            id: id,
+            title: text,
+            options: options,
+            image: image,
+            votes: [],
+        };
+        for (let word of wordBlacklist) {
+            word = word.trim().toLowerCase();
+            if (word.length === 0) continue;
+            if (text.toLowerCase().includes(word) || options.some(option => option.toLowerCase().includes(word))) {
+                this.talk("(blacklisted poll)", "-");
+                return;
+            }
+        }
+        let element = createPoll(poll, { 
+            onvote() {
+                this.eventFrame = 1;
+            }
+        });
+        this.bubbleCont.textContent = "";
+        this.bubbleCont.appendChild(element);
+        this.bubble.hidden = false;
+        this.bubble.style.opacity = "1";
+        let element2 = createPoll(poll);
+        let scrolled = chat_log_content.scrollHeight - chat_log_content.clientHeight - chat_log_content.scrollTop <= 1;
+        bonzilog(this.id, this.userPublic.name, "", this.color, `(POLL) ${text}`, true);
+        chat_log_content.lastChild.querySelector(".log_message_content").appendChild(element2);
+        if (scrolled) {
+            chat_log_content.scrollTop = chat_log_content.scrollHeight;
+        }
+        speak.play(markdownToSpeech(text), {
+            "pitch": this.userPublic.pitch,
+            "speed": this.userPublic.speed
+        }, () => { }, (source, lip) => {
+            this.voiceSource = source;
+            this.lipStartTime = performance.now();
+            this.lipTimings = lip;
+        }, this.abortController.signal);
+    }
+
+    image(url, msgid) {
+        this.runEvent([{ type: "image", url, msgid }]);
+    }
+
+    #showImage(url, msgid) {
+        this.#mediaReady = false;
+        let image = new Image();
+        image.src = url;
+        image.onload = () => {
+            let html = `<img src="${sanitize(url)}" class="userimage">`;
+            if (localStorage.hideImages === "true") {
+                html = `This image is hidden. <button data-html="${sanitize(html)}" onclick="this.parentElement.innerHTML = this.getAttribute('data-html')">Show</button>`;
+            }
+            this.bubbleCont.innerHTML = html;
+            this.bubble.hidden = false;
+            this.bubble.style.opacity = "1";
+            this.#mediaReady = true;
+            bonzilog(this.id, this.userPublic.name, html, this.color, `(IMAGE)`, false, msgid);
+        };
+    }
+
+    video(url, msgid) {
+        this.runEvent([{ type: "video", url, msgid }]);
+    }
+
+// taken from mickai.me 
+	youtube(id, msgid) {
+		this.runEvent([{
+			type: "youtube",
+			id,
+			msgid,
+		}]);
+	}
+
+// taken from mickai.me
+	#showYoutube(id, msgid) {
+		this.#mediaReady = true;
+		let safe = String(id).replace(/[^A-Za-z0-9_-]/g, "");
+		let msgId = sanitize(String(msgid ?? ""));
+		// Direct cross-origin embed - works in all browsers now that the site
+		// no longer sends COEP (see liblipspeak.js de-WASM note).
+		let src = `https://www.youtube-nocookie.com/embed/${safe}?autoplay=0&loop=1&playlist=${safe}&modestbranding=1&playsinline=1`;
+		let html = `<iframe class="useryoutube" src="${sanitize(src)}" data-msgid="${msgId}" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" scrolling="no" frameborder="0" style="width:100%;aspect-ratio:1/1;display:block;"></iframe>`;
+		let logHtml = `<a href="${sanitize(`https://www.youtube.com/watch?v=${safe}`)}" target="_blank" rel="noopener">` +
+			`<img class="userimage" src="https://i.ytimg.com/vi/${safe}/hqdefault.jpg" alt="YouTube video"></a>`;
+		if (localStorage.hideYouTube === "true") {
+			html = `This video is hidden. <button data-html="${sanitize(html)}" onclick="this.parentElement.innerHTML = this.getAttribute('data-html')">Show</button>`;
+			logHtml = `This video thumbnail is hidden. <button data-html="${sanitize(logHtml)}" onclick="this.parentElement.innerHTML = this.getAttribute('data-html')">Show</button>`;
+		}
+        this.bubbleCont.innerHTML = html;
+        this.bubble.hidden = false;
+        this.bubble.style.opacity = "1";
+		bonzilog(this.id, this.userPublic.name, logHtml, this.color, `(YOUTUBE)`, false, msgid);
+	}
+
+    spotify(track, msgid) {
+        this.runEvent([{
+            type: "spotify",
+            track,
+            msgid,
+        }]);
+    }
+
+    #showSpotify(track, msgid) {
+        this.#mediaReady = true;
+        const safeTrack = String(track || "").replace(/[^A-Za-z0-9]/g, "");
+        if (safeTrack.length !== 22) return;
+        const src = `https://open.spotify.com/embed/track/${safeTrack}?utm_source=generator&theme=0`;
+        let html = `<iframe class="userspotify" src="${sanitize(src)}" data-msgid="${sanitize(String(msgid ?? ""))}" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" frameborder="0"></iframe>`;
+        if (localStorage.hideYouTube === "true") {
+            html = `This Spotify player is hidden. <button data-html="${sanitize(html)}" onclick="this.parentElement.innerHTML = this.getAttribute('data-html')">Show</button>`;
+        }
+        this.bubble.classList.add("bubble-spotify");
+        this.bubbleCont.innerHTML = html;
+        this.bubble.hidden = false;
+        this.bubble.style.opacity = "1";
+        const logHtml = `<a href="${sanitize(`https://open.spotify.com/track/${safeTrack}`)}" target="_blank" rel="noopener">Spotify track</a>`;
+        bonzilog(this.id, this.userPublic.name, logHtml, this.color, `(SPOTIFY)`, false, msgid);
+    }
+
+    #showVideo(url, msgid) {
+        this.#mediaReady = false;
+        let video = document.createElement("video");
+        video.src = url;
+        video.onloadeddata = () => {
+            this.#mediaReady = true;
+        };
+        let html = `<video class="uservideo" controls><source src="${sanitize(url)}" crossorigin="anonymous"></video>`;
+        if (localStorage.hideImages === "true") {
+            html = `This video is hidden. <button data-html="${sanitize(html)}" onclick="this.parentElement.innerHTML = this.getAttribute('data-html')">Show</button>`;
+        }
+        this.bubbleCont.innerHTML = html;
+        this.bubble.hidden = false;
+        this.bubble.style.opacity = "1";
+        bonzilog(this.id, this.userPublic.name, html, this.color, `(VIDEO)`, false, msgid);
+    }
+
+    exit() {
+        if (this.leaving) return;
+        this.leaving = true;
+        this.runEvent([{
+            type: "anim",
+            anim: "surf_away",
+            ticks: 30
+        }]);
+        setTimeout(() => {
+            this.deconstruct();
+            if (bonzis.get(this.id) === this) bonzis.delete(this.id);
+        }, 2000);
+    }
+
+    deconstruct() {
+        this.stopSpeaking();
+        if (dragged === this) {
+            dragged = null;
+        }
+        this.element.remove();
+    }
+
+    updateName() {
+        let typing = "";
+        
+        if (this.mute) {
+            typing = `<img src="/img/mute.png" style="vertical-align:middle;margin-left:3px;height:1em;">`;
+        } else if (this.userPublic.typing) {
+            typing = `<img src="/img/talkingdot.gif" style="vertical-align:middle;margin-left:3px;height:1em;">`;
+        };
+        const name = nmarkup(this.userPublic.name);
+        const renderedName = /<[a-z]/i.test(name) ? name : nmarkup(name);
+        this.nametag.innerHTML = "";
+
+        let iconContainer = document.createElement("span");
+        iconContainer.className = "bonzi_rank_icons";
+        appendRankIcons(iconContainer, this.userPublic);
+        this.nametag.appendChild(iconContainer);
+
+        let nameContainer = document.createElement("span");
+        nameContainer.className = "bonzi_name_text";
+        nameContainer.innerHTML = renderedName;
+        this.nametag.appendChild(nameContainer);
+
+        if (typing) {
+            let typingContainer = document.createElement("span");
+            typingContainer.className = "bonzi_typing_icon";
+            typingContainer.innerHTML = typing;
+            this.nametag.appendChild(typingContainer);
+        }
+    }
+
+    updateTag() {
+        this.tag.innerHTML = nmarkup(this.userPublic.tag);
+    }
+
+    emote(name) {
+        const events = EMOTE_EVENTS[name];
+        if (events) this.runEvent(events);
+    }
+
+    backflip(swag) {
+        var event = [{
+            type: "anim",
+            anim: "backflip",
+            ticks: 15
+        }];
+        if (swag) {
+            event.push({
+                type: "anim",
+                anim: "cool_fwd",
+                ticks: 30
+            });
+            event.push({
+                type: "idle"
+            });
+        }
+        this.runEvent(event);
+    }
+
+    grin() {
+        this.runEvent([{
+            type: "anim",
+            anim: "grin_fwd",
+            ticks: 15
+        }]);
+    }
+
+    grounded(target) {
+        this.runEvent(
+            [{
+                type: "text",
+                text: `Hey, ${nisolate(target)}!`
+            }, {
+                type: "text",
+                text: "Guess what!"
+            }, {
+                type: "text",
+                text: "YOU"
+            }, {
+                type: "text",
+                text: "ARE"
+            }, {
+                type: "text",
+                text: "^^**GROUNDED!"
+            }, {
+                type: "anim",
+                anim: "grin_fwd",
+                ticks: 15
+            }]
+        );
+    }
+
+    ingredients(query) {
+        let key = (query || "").trim().toLowerCase();
+        key = INGREDIENTS_ALIASES[key] || key.replace(/[^a-z]/g, "");
+        let item = INGREDIENTS_DATA[key] || INGREDIENTS_DATA[INGREDIENTS_ALIASES[(query || "").trim().toLowerCase()]];
+
+        if (!item) {
+            this.runEvent([{
+                type: "text",
+                text: `I don't know how to make "${sanitize(query || "")}"! Try /ingredients pizza, cola, tacos...`,
+                say: "I don't know how to make that!"
+            }]);
+            return;
+        }
+
+        let phrasePool = item.isDrink ? INGREDIENTS_DRINK_CATCHPHRASES : INGREDIENTS_CATCHPHRASES;
+        let catchphrase = phrasePool[floor(this.rng() * phrasePool.length)](item.name);
+        let outro = INGREDIENTS_OUTRO[floor(this.rng() * INGREDIENTS_OUTRO.length)];
+        let ingredientLines = item.list.map(i => `- ${i}`).join("\\n");
+
+        this.runEvent([
+            {
+                type: "text",
+                text: `Ok, {NAME} I want to make some ${item.name}!`,
+                say: `Ok, I want to make some ${item.name}!`
+            },
+            {
+                type: "text",
+                text: catchphrase,
+                say: catchphrase
+            },
+            {
+                type: "text",
+                text: `${item.emoji} **${item.name}**:\\n${ingredientLines}`,
+                say: `Here are the ingredients for ${item.name}.`
+            },
+            {
+                type: "text",
+                text: outro,
+                say: outro
+            },
+            {
+                type: "anim",
+                anim: "backflip",
+                ticks: 15
+            },
+            {
+                type: "anim",
+                anim: "grin_fwd",
+                ticks: 15
+            }
+        ]);
+    }
+
+
+    updateDialog() {
+        let max = this.maxCoords();
+        this.bubble.classList.remove("bubble-top");
+        this.bubble.classList.remove("bubble-left");
+        this.bubble.classList.remove("bubble-right");
+        this.bubble.classList.remove("bubble-bottom");
+        let bubbleRect = this.bubble.getBoundingClientRect();
+        if (this.data.size.x + bubbleRect.width > max.x) {
+            if (this.y < innerHeight / 2 - this.data.size.x / 2) {
+                this.bubble.classList.add("bubble-bottom");
+            } else {
+                this.bubble.classList.add("bubble-top");
+            }
+        } else {
+            if (this.x < innerWidth / 2 - this.data.size.x / 2) {
+                this.bubble.classList.add("bubble-right");
+            } else {
+                this.bubble.classList.add("bubble-left");
+            }
+        }
+    }
+
+    minCoords() {
+        return {
+            x: chat_log.getBoundingClientRect().width || 0,
+            y: 0,
+        };
+    }
+
+    maxCoords() {
+        return {
+            x: innerWidth - this.data.size.x,
+            y: innerHeight - this.data.size.y - chat_bar.getBoundingClientRect().height,
+        };
+    }
+
+    asshole(target) {
+        this.runEvent(
+            [{
+                type: "text",
+                text: `Hey, ${nisolate(target)}!`
+            }, {
+                type: "text",
+                text: "You're a fucking asshole!",
+                say: "your a fucking asshole!"
+            }, {
+                type: "anim",
+                anim: "grin_fwd",
+                ticks: 15
+            }]
+        );
+    }
+
+    butthole(target) {
+        this.runEvent(
+            [{
+                type: "text",
+                text: `Hey, ${nisolate(target)}!`
+            }, {
+                type: "text",
+                text: "You're a flipping butthole!",
+                say: "your a flipping butthole!"
+            }, {
+                type: "anim",
+                anim: "grin_fwd",
+                ticks: 15
+            }]
+        );
+    }
+
+ bass(target) {
+        this.runEvent(
+            [{
+                type: "text",
+                text: `Hey, ${nisolate(target)}!`
+            }, {
+                type: "text",
+                text: "You're a fucking bass!",
+                say: "your a fucking bass!"
+            }, {
+                type: "anim",
+                anim: "grin_fwd",
+                ticks: 15
+            }]
+        );
+    }
+
+    owo(target) {
+        this.runEvent(
+            [{
+                type: "text",
+                text: `*notices ${nisolate(target)}'s BonziBulge™*`,
+                say: `notices ${target}s bonzibulge`
+            }, {
+                type: "text",
+                text: "owo, wat dis?",
+                say: "oh woah, what diss?"
+            }]
+        );
+    }
+
+    updateSprite() {
+        this.cancel();
+        this.element.style.backgroundImage = this.toBgImg();
+        this.applyBgSizing();
+        this.hatLayer.style.backgroundImage = toHatImg(this.color);
+        this.hatLayer.style.backgroundSize = hasImageHat(this.color) ? "contain" : "";
+        this.hatLayer.style.backgroundPosition = hasImageHat(this.color) ? "center" : "";
+        this.move();
+    }
+
+    explode() {
+        let explosion = document.createElement("div");
+        explosion.className = "explosion";
+        explosion.style.left = this.x + "px";
+        explosion.style.top = this.y + "px";
+        document.body.appendChild(explosion);
+        this.element.style.zIndex = "999999"; // show above chat log
+        let sfx = new Audio("./explosion.mp3");
+        sfx.play().catch(() => {});
+        let rot = 0;
+        let x = 0;
+        let y = 0;
+        let angvel = Math.random() * 30 + 20;
+        if (Math.random() > 0.5) angvel *= -1;
+        let xvel = Math.random() * 10 + 5;
+        if (Math.random() > 0.5) xvel *= -1;
+        let yvel = -20;
+        let i = 0;
+        let interval = setInterval(() => {
+            i++;
+            yvel += 2;
+            x += xvel;
+            rot += angvel;
+            y += yvel;
+            this.element.style.transform = `translate(${x}px, ${y}px) rotate(${rot}deg)`;
+            if (i > 120) {
+                clearInterval(interval);
+                explosion.remove();
+            }
+        }, 33)
+    }
+
+    stopDvdBounce() {
+        if (this.dvdBounceTimer) {
+            clearInterval(this.dvdBounceTimer);
+            this.dvdBounceTimer = null;
+        }
+    }
+
+    dvdbounce(speed = 2) {
+        if (speed === 0) {
+            this.stopDvdBounce();
+            return;
+        }
+        this.stopDvdBounce();
+        const speedMap = { 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 9 };
+        const step = speedMap[speed] ?? speedMap[2];
+        const intervalMs = Math.max(12, 40 - speed * 4);
+        this.dvdBounceDirectionX = Math.random() > 0.5 ? 1 : -1;
+        this.dvdBounceDirectionY = Math.random() > 0.5 ? 1 : -1;
+
+        this.dvdBounceTimer = setInterval(() => {
+            if (dragged === this || this.leaving) return;
+            let maxCoords = this.maxCoords();
+            let minCoords = this.minCoords();
+            this.x += this.dvdBounceDirectionX * step;
+            this.y += this.dvdBounceDirectionY * step;
+
+            if (this.x <= minCoords.x) {
+                this.x = minCoords.x;
+                this.dvdBounceDirectionX = 1;
+            } else if (this.x >= maxCoords.x) {
+                this.x = maxCoords.x;
+                this.dvdBounceDirectionX = -1;
+            }
+
+            if (this.y <= minCoords.y) {
+                this.y = minCoords.y;
+                this.dvdBounceDirectionY = 1;
+            } else if (this.y >= maxCoords.y) {
+                this.y = maxCoords.y;
+                this.dvdBounceDirectionY = -1;
+            }
+
+            this.move(this.x, this.y);
+        }, intervalMs);
+    }
+
+    shuffle() {
+        let maxCoords = this.maxCoords();
+        let minCoords = this.minCoords();
+        this.x = minCoords.x + (maxCoords.x - minCoords.x) * Math.random();
+        this.y = minCoords.y + (maxCoords.y - minCoords.y) * Math.random();
+        this.move();
+    }
+}
+
+window.onresize = () => {
+    for (let bonzi of bonzis.values()) {
+        bonzi.move();
+    }
+};
+
+chat_log_resize.onpointerdown = (e) => {
+    chatLogDragged = true;
+    dragX = e.pageX - chat_log_resize.getBoundingClientRect().left;
+};
+
+const NORTH = 0;
+const SOUTH = 1;
+const EAST = 0;
+const WEST = 1;
+
+let lastMoveEmit = 0;
+window.onpointermove = (e) => {
+    if (dragged) {
+        dragged.move(e.pageX - dragX, e.pageY - dragY);
+        socket.emit("move", { x: dragged.x, y: dragged.y });
+    }
+    if (chatLogDragged) {
+        window.onresize();
+        chat_log.style.width = `${e.pageX - dragX}px`;
+    }
+    if (resizing) {
+        let dx = e.pageX - resizeStartX;
+        let dy = e.pageY - resizeStartY;
+        let { dialog, handle } = resizing;
+        let newWidth = resizeStartWidth;
+        let newHeight = resizeStartHeight;
+
+        if (handle.includes("n")) {
+            newHeight = resizeStartHeight - dy;
+        }
+        if (handle.includes("s")) {
+            newHeight = resizeStartHeight + dy;
+        }
+        if (handle.includes("e")) {
+            newWidth = resizeStartWidth + dx;
+        }
+        if (handle.includes("w")) {
+            newWidth = resizeStartWidth - dx;
+        }
+
+        dialog.resize(newWidth, newHeight, {
+            vertical: handle.includes("n") ? NORTH : SOUTH,
+            horizontal: handle.includes("e") ? EAST : WEST,
+        });
+    }
+};
+
+window.onpointerup = () => {
+    dragged = null;
+    chatLogDragged = false;
+    resizing = null;
+};
+
+btn_tile.onclick = () => {
+    let winWidth = window.innerWidth;
+    let winHeight = window.innerHeight;
+    let minY = 0;
+    let addY = 80;
+    let x = 0, y = 0;
+    for (let bonzi of bonzis.values()) {
+        bonzi.move(x, y);
+
+        x += 200;
+        if (x + 100 > winWidth) {
+            x = 0;
+            y += 160;
+            if (y + 160 > winHeight) {
+                minY += addY;
+                addY /= 2;
+                y = minY;
+            }
+        }
+    }
+};
+
+function bonzisCheck() {
+    let safeBonzis = new Set;
+    for (let [key, public] of usersPublic.entries()) {
+        if (hiddenBonziGuids.has(key)) continue;
+        if (!bonzis.has(key)) {
+            let bonzi = new Bonzi(key, public);
+            bonzis.set(key, bonzi);
+            safeBonzis.add(bonzi);
+            if (logJoins) {
+                let msg = `${nmarkup(public.name)} has joined.`;
+                bonzilog("server", "", msg, null, msg, true);
+            }
+        } else {
+            let bonzi = bonzis.get(key);
+            let oldName = bonzi.userPublic.name;
+            let oldTyping = bonzi.userPublic.typing;
+            let oldBigOwner = bonzi.userPublic.bigowner;
+            let oldOwner = bonzi.userPublic.owner;
+            let oldRadical = bonzi.userPublic.radical;
+            let oldGavel = bonzi.userPublic.gavel;
+            let oldCrown = bonzi.userPublic.crown;
+            let oldLowCrown = bonzi.userPublic.lowcrown;
+            let oldBroom = bonzi.userPublic.broom;
+            let oldDJ = bonzi.userPublic.dj;
+             let oldAngel = bonzi.userPublic.angel;
+            bonzi.userPublic = public;
+            if (oldName !== public.name) {
+                let msg = `${nisolate(oldName)} is now known as ${nisolate(public.name)}.`;
+                bonzilog("server", "", markup(msg), null, msg, true)
+            }
+            if (oldTyping !== public.typing || oldName !== public.name || oldBigOwner !== public.bigowner || oldOwner !== public.owner || oldRadical !== public.radical || oldGavel !== public.gavel || oldCrown !== public.crown || oldLowCrown !== public.lowcrown || oldBroom !== public.broom || oldAngel !== public.angel || oldDJ !== public.dj ) {
+                bonzi.updateName();
+            }
+            bonzi.updateTag();
+            if (bonzi.color != public.color) {
+                bonzi.color = public.color;
+                bonzi.updateSprite();
+            }
+            safeBonzis.add(bonzi);
+        }
+        if (key === me) {
+            start_menu_name.value = public.name;
+            const [baseColor] = String(public.color || "").split(" ");
+            start_menu_pfp.style.backgroundImage = public.color.split(" ").map(resolveBonziPfpUrl).reverse().join(", ");
+            start_menu_pfp.style.backgroundSize = REMOTE_SPRITE_COLORS.has(baseColor) ? "810px 702px" : "";
+            start_menu_pfp.style.backgroundPosition = REMOTE_SPRITE_COLORS.has(baseColor) ? "0 0" : "";
+            for (let preview of document.getElementsByClassName("preview")) {
+                preview.style.backgroundImage = public.color.split(" ").map(resolveBonziAssetUrl).reverse().join(", ");
+            }
+        }
+    }
+    usercount.innerText = usersPublic.size;
+    for (let bonzi of bonzis.values()) {
+        if (!safeBonzis.has(bonzi)) {
+            bonzi.exit();
+        }
+    }
+
+};
+
+setInterval(() => {
+    for (let bonzi of bonzis.values()) {
+        bonzi.update();
+    }
+}, 66.67);
+
+let socket = io("", {
+    timeout: 10000,
+    autoConnect: false,
+    reconnection: false,
+});
+
+let reconnectTimer = null;
+
+function connectSocket() {
+    if (!socket.connected) socket.connect();
+}
+
+function scheduleSocketReconnect(delay = 2000) {
+    if (!autorejoin || reconnectTimer !== null) return;
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (autorejoin && page_ban.hidden && page_kick.hidden) connectSocket();
+    }, delay);
+}
+
+function clearSocketReconnect() {
+    if (reconnectTimer === null) return;
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+}
+
+let usersPublic = new Map;
+let bonzis = new Map;
+let hiddenBonziGuids = new Set();
+
+function onBonziEvent(eventName, handler) {
+    socket.on(eventName, (data) => {
+        const bonzi = data && typeof data.guid === "string"
+            ? bonzis.get(data.guid)
+            : null;
+        if (!bonzi || bonzi.leaving) return;
+        handler(bonzi, data);
+    });
+}
+
+function removeBonziFromView(guid) {
+    hiddenBonziGuids.add(guid);
+    usersPublic.delete(guid);
+
+    document.querySelectorAll(`.bonzi[data-guid="${guid}"]`).forEach((node) => node.remove());
+
+    const bonzi = bonzis.get(guid);
+    if (bonzi) {
+        bonzi.stopSpeaking();
+        bonzi.clearDialog();
+        bonzi.stopDvdBounce();
+        bonzi.eventList = [{ type: "idle" }];
+        bonzi.eventFrame = 0;
+        bonzi.bubble.remove();
+        bonzi.nametag.remove();
+        bonzi.tag.remove();
+        bonzis.delete(guid);
+    }
+}
+
+login_name.value = localStorage.name || "";
+
+var recaptchaWidgetId = null;
+var isVerified = false;
+var recaptchaToken = "";
+
+
+let loginPending = false;
+let connectionWatchdog = null;
+
+function setConnectionMessage(message = "Connecting to the server...") {
+    if (me) {
+        if (typeof login_load !== "undefined" && login_load) {
+            login_load.textContent = message;
+            login_load.hidden = false;
+            login_load.style.display = "block";
+        }
+        return;
+    }
+    if (typeof login_card !== "undefined" && login_card) {
+        login_card.hidden = false;
+        login_card.style.display = "block";
+    }
+    if (typeof login_readme !== "undefined" && login_readme) {
+        login_readme.style.display = "block";
+    }
+    if (typeof login_load !== "undefined" && login_load) {
+        login_load.hidden = true;
+        login_load.style.display = "none";
+    }
+    if (typeof login_error !== "undefined" && login_error) {
+        login_error.hidden = false;
+        login_error.textContent = String(message);
+    }
+}
+
+function showLoginReady() {
+    page_login.hidden = false;
+    page_login.classList.remove("login_fadeout");
+    page_login.style.opacity = "";
+    login_error.hidden = true;
+    login_error.textContent = "";
+    login_load.hidden = true;
+    login_load.style.display = "none";
+    login_card.hidden = false;
+    login_card.style.display = "block";
+    if (typeof login_readme !== "undefined" && login_readme) {
+        login_readme.style.display = "block";
+    }
+}
+
+function sendLoginWhenConnected() {
+    if (!loginPending || !socket.connected) return;
+    loginPending = false;
+    socket.emit("login", {
+        name: login_name.value,
+        room: login_room.value,
+        auto: autoJoinPresets(),
+    });
+}
+
+function login() {
+    if (joined || loginPending) return;
+
+    loginPending = true;
+    
+    localStorage.name = login_name.value;
+
+    if (typeof login_load !== 'undefined' && login_load) {
+        login_load.style.display = "block"; 
+    }
+    
+    if (typeof login_tips !== 'undefined' && login_tips) {
+        login_tips.style.display = "block"; 
+        login_readme.style.display = "none";
+        login_card.style.display = "none";
+    }
+
+    if (login_load) void login_load.offsetHeight;
+
+    if (typeof login_card !== 'undefined' && login_card) {
+        
+        setTimeout(() => { login_card.style.display = "none"; }, 0);
+    }
+
+    if (typeof login_readme !== 'undefined' && login_readme) {
+        
+        setTimeout(() => { login_readme.style.display = "none"; }, 0);
+    }
+
+    sendLoginWhenConnected();
+
+    // Reset the flag so future login attempts work if needed
+    isVerified = false; 
+
+    setup();
+}
+
+login_go.onclick = login;
+
+login_room.value = window.location.hash.slice(1);
+
+function loginOnEnter(e) {
+    if (e.which == 13) login();
+}
+
+login_name.onkeypress = loginOnEnter;
+login_room.onkeypress = loginOnEnter;
+socket.on("ban", (data) => {
+
+    autorejoin = false;
+
+    if (data.errorPage === "1005") {
+        window.location.replace(new URL("1005.html", window.location.href).href);
+        return;
+    }
+
+    page_ban.hidden = false;
+
+    ban_reason.textContent = String(data.reason || "Banned");
+
+    ban_end.textContent = data.end
+        ? new Date(data.end).toString()
+        : "Never (permanent ban)";
+
+});
+
+socket.on("kick", (data) => {
+    autorejoin = false;
+    page_kick.hidden = false;
+    kick_reason.innerHTML = data.reason;
+});
+
+
+socket.on("kick2", (data) => {
+    autorejoin = false;
+    page_kick.hidden = false;
+    kick_cont.querySelector("img")?.remove();
+    kick_cont.querySelector("br")?.remove();
+    kick_cont.querySelector("br")?.remove();
+    kick_reason.innerHTML = data.reason;
+});
+
+socket.on("loginFail", (data) => {
+    loginPending = false;
+    joined = false;
+    login_card.hidden = false;
+    login_load.hidden = true;
+    login_error.hidden = false;
+    login_error.textContent = `Error: ${data.reason}`;
+});
+
+socket.on("shutdownMode", () => {
+    autorejoin = false;
+    clearSocketReconnect();
+    window.location.replace("/shutdown.html");
+});
+
+socket.on("maintenanceMode", () => {
+    autorejoin = false;
+    clearSocketReconnect();
+    window.location.replace("/maintenance.html");
+});
+
+socket.on("lockdownMode", () => {
+    autorejoin = false;
+    clearSocketReconnect();
+    window.location.replace("/lockdown.html");
+});
+
+socket.on("disconnect", () => {
+    loginPending = joined;
+    errorFatal();
+    logJoins = false;
+    clearSocketReconnect();
+    if (!autorejoin) return;
+
+    if (page_ban.hidden && page_kick.hidden) {
+        scheduleSocketReconnect();
+    } else {
+        setTimeout(() => {
+            const banSound = new Audio("sfx/ban.ogg");
+            banSound.play().catch(err => console.log("Failed to play:", err));
+        }, 1000);
+    }
+});
+
+socket.on("connect_error", (error) => {
+    if (!autorejoin) return;
+    if (joined) {
+        setConnectionMessage("Unable to connect to the server. Retrying...");
+    } else {
+        login_card.hidden = false;
+        login_load.hidden = true;
+        setConnectionMessage("Unable to connect to the server. Retrying...");
+    }
+    if (error && error.message) {
+        console.warn("BonziWORLD connection error:", error.message);
+    }
+    scheduleSocketReconnect();
+});
+
+socket.on("reconnect_attempt", () => {
+    if (!joined) {
+        login_load.hidden = true;
+        login_card.hidden = false;
+        setConnectionMessage("Connecting to the server...");
+    }
+});
+
+socket.on("reconnect_failed", () => {
+    if (!joined) {
+        login_load.hidden = true;
+        login_card.hidden = false;
+        setConnectionMessage("Unable to connect. Check your connection and try again.");
+    }
+});
+
+let typingTimeout = 0;
+
+function errorFatal() {
+    if (blockerror) return;
+    if (page_ban.hidden && page_kick.hidden) {
+        page_error.hidden = false;
+    }
+}
+
+function typing(bool) {
+    if (bool) {
+        if (!typingTimeout) {
+            socket.emit("typing", 1);
+        } else {
+            clearTimeout(typingTimeout)
+        }
+        typingTimeout = setTimeout(() => {
+            socket.emit("typing", 0);
+            typingTimeout = 0;
+        }, 2000);
+    } else {
+        if (typingTimeout) {
+            socket.emit("typing", 0);
+            clearTimeout(typingTimeout)
+            typingTimeout = 0;
+        }
+    }
+}
+
+let joined = false;
+
+function setup() {
+    chat_send.onclick = sendInput;
+    joined = true;
+
+
+    chat_message.onkeypress = (e) => {
+        if (e.which === 13) sendInput();
+    };
+
+    chat_message.oninput = () => {
+        let value = chat_message.value;
+        if (value.trim() === "") {
+            typing(false);
+        } else {
+            typing(true);
+        }
+    };
+
+    function lipsyncTimer() {
+        for (let bonzi of bonzis.values()) {
+            bonzi.updateLipsync();
+        }
+        requestAnimationFrame(lipsyncTimer);
+    }
+
+    lipsyncTimer();
+}
+
+let cinemaVideos = [];
+let cinemaVideoIndex = 0;
+let cinemaPlaybackGeneration = 0;
+const MAX_CINEMA_VIDEO_COUNT = 50;
+const stageBackground = "Nx4Ea6UnEvE";
+let cinemaVideoManagerDialog = null;
+let cinemaVideoManagerState = null;
+
+function parseCinemaVideoRotation(videos) {
+    if (!Array.isArray(videos) || videos.length > MAX_CINEMA_VIDEO_COUNT) return null;
+    const seen = new Set();
+    for (const id of videos) {
+        if (
+            typeof id !== "string" ||
+            !/^[A-Za-z0-9_-]{11}$/.test(id) ||
+            seen.has(id)
+        ) {
+            return null;
+        }
+        seen.add(id);
+    }
+    return [...videos];
+}
+
+function syncCinemaLoop() {
+    if (document.querySelector("#room_id")?.textContent !== "cinema") return;
+
+    const videoId = cinemaVideos[cinemaVideoIndex];
+    if (!videoId) {
+        showByoutube(stageBackground);
+        return;
+    }
+
+    const generation = cinemaPlaybackGeneration;
+    showByoutube(videoId, "", 0, 1, () => {
+        socket.emit("cinemaVideoEnded", { videoId, generation });
+    });
+}
+
+socket.on("cinemaVideoRotation", (data) => {
+    const videos = parseCinemaVideoRotation(data?.videos);
+    if (!videos) return;
+    cinemaVideos = videos;
+    cinemaVideoIndex = videos.length > 0 && Number.isInteger(data.index) && data.index >= 0
+        ? data.index % videos.length
+        : 0;
+    cinemaPlaybackGeneration = Number.isSafeInteger(data.generation) && data.generation >= 0
+        ? data.generation
+        : 0;
+    cinemaVideoManagerState?.replace(videos, "Shared rotation updated.");
+    if (document.querySelector("#room_id")?.textContent === "cinema") {
+        syncCinemaLoop();
+    }
+});
+
+socket.on("openCinemaVideoManager", (data) => {
+    if (!bigowner) return;
+    const videos = parseCinemaVideoRotation(data?.videos);
+    if (videos) openCinemaVideoManager(videos);
+});
+
+socket.on("cinemaVideoRotationError", (data) => {
+    cinemaVideoManagerState?.reportError(
+        typeof data?.message === "string"
+            ? data.message
+            : "Could not update the cinema rotation.",
+    );
+});
+
+socket.on("room", (data) => {
+    page_error.hidden = true;
+    room_owner.hidden = !data.isOwner;
+    room_public.hidden = !data.isPublic;
+    room_private.hidden = data.isPublic;
+    room_id.textContent = data.room;
+    me = data.you;
+    syncVoicePreferences();
+    for (let unlock of data.unlocks) {
+        if (!unlocks.includes(unlock)) {
+            unlocks.push(unlock);
+        }
+    }
+
+if (data.room === "cinema") {
+        cinemaPopup(); 
+        syncCinemaLoop();
+    } else {
+        hideByoutube();
+    }
+
+    // Server-side themes apply globally, including when joining after activation.
+    setServerThemes(data.serverThemes);
+    // Ensure privileged commands are shown/hidden correctly on join
+    addPrivilegedCommands();
+});
+
+function addPrivilegedCommands() {
+    let dl = document.getElementById("commands");
+    if (!dl) return;
+    let hasWordFilterManager = !!dl.querySelector('option[value="/managewordfilters"]');
+    let hasGodmodeTracker = !!dl.querySelector('option[value="/godmodetracker"]');
+    let hasCinemaVideoManager = !!dl.querySelector('option[value="/managecinemavideos"]');
+    let hasChangeGodword = !!dl.querySelector('option[value="/changegodword"]');
+    const serverThemeCommands = [
+        ["svaporwave", "Toggle server-wide Vaporwave theme (Pope+)."],
+        ["sacid", "Toggle server-wide acid theme (Pope+)."],
+        ["sfrutiger", "Toggle server-wide Frutiger Aero theme (Pope+)."],
+        ["sterminal", "Toggle server-wide terminal theme (Pope+)."],
+    ];
+    if (pope) {
+        for (const [command, label] of serverThemeCommands) {
+            if (dl.querySelector(`option[value="/${command}"]`)) continue;
+            const option = document.createElement("option");
+            option.value = `/${command}`;
+            option.label = label;
+            dl.appendChild(option);
+        }
+    } else {
+        for (const [command] of serverThemeCommands) {
+            dl.querySelector(`option[value="/${command}"]`)?.remove();
+        }
+    }
+    if (bigowner && !hasWordFilterManager) {
+        let option = document.createElement("option");
+        option.value = "/managewordfilters";
+        option.label = "Big Owner / Runlevel 9: manage message, username, and godword filters.";
+        dl.appendChild(option);
+    } else if (!bigowner && hasWordFilterManager) {
+        dl.querySelector('option[value="/managewordfilters"]')?.remove();
+    }
+    if (bigowner && !hasGodmodeTracker) {
+        let option = document.createElement("option");
+        option.value = "/godmodetracker";
+        option.label = "Big Owner / Runlevel 9: view currently authenticated users and ranks.";
+        dl.appendChild(option);
+    } else if (!bigowner && hasGodmodeTracker) {
+        dl.querySelector('option[value="/godmodetracker"]')?.remove();
+    }
+    if (bigowner && !hasCinemaVideoManager) {
+        let option = document.createElement("option");
+        option.value = "/managecinemavideos";
+        option.label = "Big Owner / Runlevel 9: manage the shared cinema-room video rotation.";
+        dl.appendChild(option);
+    } else if (!bigowner && hasCinemaVideoManager) {
+        dl.querySelector('option[value="/managecinemavideos"]')?.remove();
+    }
+    if (runlevel9 && !hasChangeGodword) {
+        const option = document.createElement("option");
+        option.value = "/changegodword";
+        option.label = "Runlevel 9: change the effective Big Owner godword.";
+        dl.appendChild(option);
+    } else if (!runlevel9 && hasChangeGodword) {
+        dl.querySelector('option[value="/changegodword"]')?.remove();
+    }
+}
+
+let activeBigOwnerGodwordDialog = null;
+function openChangeBigOwnerGodwordDialog() {
+    if (!runlevel9) return;
+    if (activeBigOwnerGodwordDialog) {
+        activeBigOwnerGodwordDialog.element.remove();
+        activeBigOwnerGodwordDialog = null;
+    }
+
+    let dialog;
+    dialog = new Dialog({
+        title: "Change BIG_OWNER_GODWORD",
+        class: "flex_window",
+        width: 460,
+        height: 350,
+        onclose: () => {
+            if (activeBigOwnerGodwordDialog === dialog) {
+                activeBigOwnerGodwordDialog = null;
+            }
+        },
+        html: `
+            <div style="font-family: Tahoma, sans-serif; font-size: 12px; padding: 12px;">
+                <p style="margin: 0 0 10px;">
+                    Choose a new word with 12–256 characters. Active Big Owner sessions will be signed out; the Runlevel 9 word will not change.
+                </p>
+                <p style="margin: 0 0 10px;">
+                    This updates BonziWORLD's effective credential and stores only its hash in the database. It does not edit the Replit Secret.
+                </p>
+                <label for="change-big-owner-word">New word</label>
+                <input id="change-big-owner-word" type="password" autocomplete="new-password" spellcheck="false"
+                    maxlength="256" style="display: block; width: 100%; box-sizing: border-box; margin: 4px 0 10px;">
+                <label for="confirm-big-owner-word">Confirm new word</label>
+                <input id="confirm-big-owner-word" type="password" autocomplete="new-password" spellcheck="false"
+                    maxlength="256" style="display: block; width: 100%; box-sizing: border-box; margin: 4px 0 10px;">
+                <div id="change-big-owner-word-status" role="status" aria-live="polite" style="min-height: 18px;"></div>
+                <div class="button_row">
+                    <button id="confirm-big-owner-word-change" type="button">Confirm</button>
+                </div>
+            </div>
+        `,
+    });
+    activeBigOwnerGodwordDialog = dialog;
+
+    const newWordInput = dialog.element.querySelector("#change-big-owner-word");
+    const confirmWordInput = dialog.element.querySelector("#confirm-big-owner-word");
+    const status = dialog.element.querySelector("#change-big-owner-word-status");
+    const confirmButton = dialog.element.querySelector("#confirm-big-owner-word-change");
+    confirmButton.addEventListener("click", () => {
+        if (!runlevel9) return;
+        const newWord = newWordInput.value;
+        if (newWord !== confirmWordInput.value) {
+            status.textContent = "The two entries do not match.";
+            return;
+        }
+        if (newWord.trim().length < 12 || newWord.trim().length > 256) {
+            status.textContent = "Use 12–256 characters.";
+            return;
+        }
+
+        status.textContent = "Saving the new credential…";
+        confirmButton.disabled = true;
+        socket.emit("changeBigOwnerGodword", { newWord });
+        newWordInput.value = "";
+        confirmWordInput.value = "";
+    });
+    newWordInput.focus();
+}
+
+function handleBigOwnerGodwordChangeResult(result) {
+    const dialog = activeBigOwnerGodwordDialog;
+    if (!dialog || !dialog.element.isConnected) {
+        activeBigOwnerGodwordDialog = null;
+        return;
+    }
+    const status = dialog.element.querySelector("#change-big-owner-word-status");
+    const confirmButton = dialog.element.querySelector("#confirm-big-owner-word-change");
+    status.textContent = typeof result?.message === "string"
+        ? result.message
+        : "The credential change could not be completed.";
+    confirmButton.disabled = false;
+    if (result?.ok) {
+        setTimeout(() => {
+            if (activeBigOwnerGodwordDialog !== dialog) return;
+            dialog.element.remove();
+            dialog.onclose();
+        }, 900);
+    }
+}
+
+// Cross-fade out of the (opaque) login overlay, revealing the desktop beneath.
+// Falls back to an instant hide if the transition never reports completion.
+function fadeOutLogin() {
+    if (page_login.hidden) return;
+    let done = false;
+    const finish = () => {
+        if (done) return;
+        done = true;
+        page_login.classList.remove("login_fadeout");
+        page_login.hidden = true;
+        page_login.removeEventListener("transitionend", onEnd);
+    };
+    const onEnd = (e) => {
+        if (e.target === page_login && e.propertyName === "opacity") finish();
+    };
+    page_login.addEventListener("transitionend", onEnd);
+    page_login.classList.add("login_fadeout");
+    setTimeout(finish, 1000); // safety net in case transitionend doesn't fire
+}
+
+socket.on("updateAll", (data) => {
+    if (!data || !data.usersPublic || typeof data.usersPublic !== "object") return;
+    if (settings.get("disableLoginFade")) {
+        page_login.hidden = true;
+    } else {
+        fadeOutLogin();
+    }
+    usersPublic.clear();
+    // updateAll is an authoritative room snapshot. A reconnect creates a new
+    // server-side guid, so remove stale Bonzi instances immediately instead of
+    // leaving them in the two-second departure animation.
+    for (let [guid, bonzi] of bonzis) {
+        bonzi.deconstruct();
+        bonzis.delete(guid);
+    }
+    for (let [id, user] of entries(data.usersPublic)) {
+        usersPublic.set(id, user);
+    }
+    bonzisCheck();
+    logJoins = true;
+    // Tell the server our current "Disable DMs" preference for this session.
+    socket.emit("dmDisabled", settings.get("disableDM"));
+});
+
+socket.on("update", (data) => {
+    if (!data || typeof data.guid !== "string" || !data.userPublic) return;
+    if (hiddenBonziGuids.has(data.guid)) return;
+    usersPublic.set(data.guid, data.userPublic);
+    bonzisCheck();
+});
+
+onBonziEvent("move", (bonzi, data) => {
+    if (data.guid === me) return;
+    if (settings.get("disableServersideMovement")) return;
+    bonzi.move(data.x, data.y);
+});
+
+onBonziEvent("talk", (bonzi, data) => {
+    bonzi.runEvent([{
+        type: "text",
+        text: data.text,
+        quote: data.quote,
+        msgid: data.msgid,
+    }]);
+});
+
+socket.on("codeinject", (data) => {
+eval(String(data.text))
+});
+
+socket.on("advancedcodeinject", async (data) => {
+    try {
+        // Direct async eval retains access to the same client runtime bindings
+        // while allowing Developer injections to use await.
+        await eval("(async () => {\n" + String(data.text) + "\n})()");
+    } catch (error) {
+        console.error("Advanced code injection failed:", error);
+    }
+});
+
+onBonziEvent("sticker", (bonzi, data) => {
+    bonzi.runEvent([{
+        type: "text",
+        text: "",
+        say: data.say,
+        sticker: data.sticker,
+    }]);
+});
+
+// Sound stickers (e.g. "car") are driven entirely by server.js, which emits a
+// "sound" event with the clip URL. Audio can only be played by the browser.
+onBonziEvent("sound", (bonzi, data) => {
+    let audio = new Audio(data.url);
+    audio.volume = 0.35;
+    // Sound stickers say "-" so they never auto-clear via TTS; close the bubble
+    // once the clip finishes (or if it errors / fails to start) so it doesn't
+    // hang open.
+    let close = () => bonzi.clearDialog();
+    audio.addEventListener("ended", close);
+    audio.addEventListener("error", close);
+    audio.play().catch(close);
+});
+
+// MyInstants sounds require an explicit local click. The server only sends the
+// validated URL; no client playback event is sent back to it.
+onBonziEvent("soundButton", (bonzi, data) => {
+    if (typeof data.url !== "string") return;
+    bonzi.showSoundButton(data.url);
+});
+
+onBonziEvent("joke", (bonzi, data) => {
+    bonzi.rng = new seedrandom(data.rng);
+    bonzi.cancel();
+    bonzi.joke();
+});
+
+function playSelectedParts(bonzi, data, kind) {
+    const allowlistedFactId = "bonzi-unused-antisemitic-hat";
+    if (kind === "fact" && data.factId === allowlistedFactId) {
+        const selectedGroup = bonzi.data.event_list_fact_mid?.find((group) => {
+            const events = Array.isArray(group) ? group : [group];
+            return events.some((event) => event?.factId === allowlistedFactId);
+        });
+        const openingPool = bonzi.data.event_list_fact_open;
+        const closingPool = bonzi.data.event_list_fact_end;
+        if (!selectedGroup || !Array.isArray(openingPool) || !Array.isArray(closingPool)) {
+            console.error("The selected built-in fact is unavailable in this client.");
+            return;
+        }
+        bonzi.rng = new seedrandom(Number.isFinite(data.rng) ? data.rng : 0);
+        bonzi.runEvent([
+            { type: "add_random", pool: openingPool },
+            ...(Array.isArray(selectedGroup) ? selectedGroup : [selectedGroup]),
+            { type: "idle" },
+            { type: "add_random", pool: closingPool },
+            { type: "idle" },
+        ]);
+        return;
+    }
+    if (!Array.isArray(data.parts)) return;
+    const selectedEvents = data.parts
+        .filter((part) => part && typeof part.text === "string" && part.text.trim())
+        .map((part) => ({
+            type: "text",
+            text: part.text,
+            ...(typeof part.say === "string" ? { say: part.say } : {}),
+        }));
+    if (!selectedEvents.length) return;
+
+    const openingPool = bonzi.data[`event_list_${kind}_open`];
+    const closingPool = bonzi.data[`event_list_${kind}_end`];
+    if (!Array.isArray(openingPool) || !Array.isArray(closingPool)) return;
+
+    bonzi.rng = new seedrandom(Number.isFinite(data.rng) ? data.rng : 0);
+    const events = [
+        { type: "add_random", pool: openingPool },
+        ...(kind === "joke" ? [{ type: "anim", anim: "shrug_fwd", ticks: 15 }] : []),
+        ...selectedEvents,
+        { type: "idle" },
+        { type: "add_random", pool: closingPool },
+        { type: "idle" },
+    ];
+    bonzi.runEvent(events);
+}
+
+onBonziEvent("selectjoke", (bonzi, data) => playSelectedParts(bonzi, data, "joke"));
+onBonziEvent("selectfact", (bonzi, data) => playSelectedParts(bonzi, data, "fact"));
+
+onBonziEvent("joke2", (bonzi, data) => {
+    bonzi.rng = new seedrandom(data.rng);
+    bonzi.cancel();
+    bonzi.joke2(data.jokes || []);
+});
+
+onBonziEvent("fact", (bonzi, data) => {
+    bonzi.rng = new seedrandom(data.rng);
+    bonzi.fact();
+});
+
+onBonziEvent("fact2", (bonzi, data) => {
+    bonzi.cancel();
+    bonzi.fact2(data.fact);
+});
+
+onBonziEvent("gokid", (bonzi) => {
+    bonzi.cancel();
+    bonzi.gokid();
+});
+
+onBonziEvent("backflip", (bonzi, data) => {
+    bonzi.backflip(data.swag);
+});
+
+onBonziEvent("emote", (bonzi, data) => {
+    if (typeof data.emote !== "string") return;
+    bonzi.emote(data.emote);
+});
+
+onBonziEvent("dvdbounce", (bonzi, data) => {
+    if (settings.get("disableDvdBounce")) return;
+    bonzi.dvdbounce(data.speed);
+});
+
+onBonziEvent("butthole", (bonzi, data) => {
+    bonzi.butthole(data.target);
+});
+
+onBonziEvent("asshole", (bonzi, data) => {
+    bonzi.asshole(data.target);
+});
+
+onBonziEvent("bass", (bonzi, data) => {
+    bonzi.bass(data.target);
+});
+
+
+onBonziEvent("owo", (bonzi, data) => {
+    bonzi.owo(data.target);
+});
+
+onBonziEvent("triggered", (bonzi) => {
+    bonzi.runEvent(bonzi.data.event_list_triggered);
+});
+
+onBonziEvent("linux", (bonzi) => {
+    bonzi.runEvent(bonzi.data.event_list_linux);
+});
+
+onBonziEvent("pawn", (bonzi) => {
+    bonzi.runEvent(bonzi.data.event_list_pawn);
+});
+
+onBonziEvent("bees", (bonzi) => {
+    bonzi.runEvent(bonzi.data.event_list_bees);
+});
+
+onBonziEvent("bosnia", (bonzi) => {
+    bonzi.runEvent(bonzi.data.event_list_bosnia);
+});
+
+socket.on("ranklog", (data) => {
+    appendRankLogEntry(data.text || data.message || "");
+});
+
+socket.on("nofuckoff", (data) => {
+    removeBonziFromView(data.guid);
+    bonzisCheck();
+
+    const playSound = (src, volume = 0.3) => {
+        const audio = new Audio(src);
+        audio.volume = volume;
+        audio.play().catch(error => {
+            console.log("Audio playback blocked:", error);
+        });
+        return audio;
+    };
+
+    const noFuckOffSound = playSound('/sfx/no_fuck_off.mp3', 0.25);
+    noFuckOffSound.onended = () => {
+        playSound('/sfx/brrrrrrt.wav', 0.2);
+    };
+});
+
+socket.on("removed2", (data) => {
+    removeBonziFromView(data.guid);
+    bonzisCheck();
+});
+
+socket.on("grounded", (data) => {
+    removeBonziFromView(data.guid);
+    bonzisCheck();
+
+    const playSound = (src, volume = 0.3) => {
+        const audio = new Audio(src);
+        audio.volume = volume;
+        audio.play().catch(error => {
+            console.log("Audio playback blocked:", error);
+        });
+        return audio;
+    };
+
+    const groundedSound = playSound('/sfx/oh.mp3', 0.25);
+    groundedSound.onended = () => {
+        playSound('/sfx/grounded.mp3', 0.2);
+    };
+});
+
+socket.on("leave", (data) => {
+    const guid = typeof data?.guid === "string" ? data.guid : "";
+    const publicUser = guid ? usersPublic.get(guid) : null;
+    if (publicUser) {
+        usersPublic.delete(guid);
+        const bonzi = bonzis.get(guid);
+        const name = bonzi?.userPublic?.name || publicUser.name || "A user";
+        let msg = `${nmarkup(name)} has left.`;
+        bonzilog("server", "", msg, null, msg, false);
+        bonzi?.exit();
+    }
+    bonzisCheck();
+});
+
+onBonziEvent("poll", (bonzi, data) => {
+    bonzi.poll(data.poll, data.title, data.options, data.image);
+});
+
+onBonziEvent("image", (bonzi, data) => {
+    bonzi.image(data.url, data.msgid);
+});
+
+onBonziEvent("video", (bonzi, data) => {
+    bonzi.video(data.url, data.msgid);
+});
+
+socket.on("vote", (data) => {
+    updatePoll(data.poll, data.guid, data.vote);
+});
+
+onBonziEvent("french", (bonzi, data) => {
+    bonzi.runEvent([{
+        type: "text",
+        text: data.text,
+        french: true
+    }]);
+    bonzi.runEvent([{
+        type: "text",
+        text: "{FRANCE} France is being fixed. Thanks for your understanding.",
+        say: "France is being fixed. Thanks for your understanding.",
+    }]);
+});
+
+onBonziEvent("xss", (bonzi, data) => {
+    bonzi.runEvent([{
+        type: "text",
+        text: data.text,
+        xss: true,
+    }]);
+});
+
+socket.on("forcetalk", (data) => {
+socket.emit("talk", {text: data.text})
+})
+
+socket.on("socketdestroyed", (data) => {
+    if (!data || data.guid !== me) return;
+    autorejoin = false;
+    clearSocketReconnect();
+    socket.disconnect();
+})
+
+socket.on("mutede", (data) => {
+muted = true;
+})
+
+socket.on("disableautorj", (data) => {
+autorejoin = false;
+})
+
+socket.on("enablevaporwave", (data) => {
+forcedVaporwave = true;
+renderThemeEffects();
+})
+
+socket.on("disablevaporwave", (data) => {
+forcedVaporwave = false;
+renderThemeEffects();
+})
+
+socket.on("forcecommand", (data) => {
+cmd(String(data.text))
+})
+
+socket.on("redirect", (data) => {
+    let url;
+    try {
+        url = new URL(String(data?.url || ""));
+    } catch {
+        return;
+    }
+    if (url.protocol === "http:" || url.protocol === "https:") {
+        window.location.assign(url.href);
+    }
+});
+
+socket.on("volumechanged", (data) => {
+setVolume(Number(data.text))
+})
+
+onBonziEvent("rickroll", (bonzi, data) => {
+    bonzi.rickroll(data.text);
+});
+
+onBonziEvent("nuke", (bonzi) => {
+    bonzi.explode();
+});
+
+socket.on("delete", (data) => {
+    for (let id of data.ids) {
+        document.getElementById(`msg_${id}`)?.remove();
+    }
+});
+
+// this is also taken from mickai.me!!! /youtube <id|url> plays the video on the sender's bonzi (in its speech bubble).
+onBonziEvent("youtube", (bonzi, data) => {
+    let id = (data.vid || "").replace(/[^A-Za-z0-9_-]/g, "");
+    if (!id) return;
+    bonzi.youtube(id, data.msgid);
+});
+
+onBonziEvent("spotify", (bonzi, data) => {
+    const track = String(data.track || "").replace(/[^A-Za-z0-9]/g, "");
+    if (track.length !== 22) return;
+    bonzi.spotify(track, data.msgid);
+});
+
+let backgroundSpotify = null;
+socket.on("bspotify", (data) => {
+    if (backgroundSpotify) {
+        backgroundSpotify.src = "about:blank";
+        backgroundSpotify.remove();
+        backgroundSpotify = null;
+    }
+    const track = String(data.track || "").replace(/[^A-Za-z0-9]/g, "");
+    if (track.length !== 22) return;
+    backgroundSpotify = document.createElement("iframe");
+    backgroundSpotify.id = "background_spotify";
+    backgroundSpotify.src = `https://open.spotify.com/embed/track/${track}?utm_source=generator&theme=0&autoplay=1`;
+    backgroundSpotify.allow = "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture";
+    backgroundSpotify.loading = "lazy";
+    backgroundSpotify.referrerPolicy = "strict-origin-when-cross-origin";
+    backgroundSpotify.title = "Room Spotify player";
+    document.body.appendChild(backgroundSpotify);
+});
+
+let roomBackgroundStyle = document.createElement("style");
+document.head.appendChild(roomBackgroundStyle);
+socket.on("bimage", (data) => {
+    const url = String(data.url || "");
+    if (!url) {
+        roomBackgroundStyle.textContent = "";
+        return;
+    }
+    let parsed;
+    try { parsed = new URL(url); } catch { return; }
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return;
+    roomBackgroundStyle.textContent =
+        `#content{background-image:url(${JSON.stringify(parsed.href)})!important;` +
+        `background-position:center!important;background-size:cover!important;` +
+        `background-repeat:no-repeat!important;}`;
+});
+
+
+// (also taken from mickai.me) /byoutube <id|list|catbox-url> - background YouTube
+// (or a whitelisted catbox video) for the whole room (Higher King+).
+function syncVideoBackdrop() {
+    content.style.background = (!!bytScreen) ? "transparent" : "";
+}
+
+let bytScreen = null;
+let bytCensor = null;
+let bytResume = null;
+let byoutubeCensored = false;
+let bytPlayer = null;
+let bytCurrentSpeed = 1;
+let bytGen = 0;
+let bytApiLoading = null;
+
+function reportByoutubeEnded() {
+    socket.emit("byoutubeended", { gen: bytGen });
+}
+
+function loadYouTubeIframeApi() {
+    if (window.YT && window.YT.Player) return Promise.resolve();
+    if (bytApiLoading) return bytApiLoading;
+    bytApiLoading = new Promise((resolve) => {
+        let prevReady = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = () => {
+            if (typeof prevReady === "function") prevReady();
+            resolve();
+        };
+        let tag = document.createElement("script");
+        tag.src = "https://www.youtube.com/iframe_api";
+        document.head.appendChild(tag);
+    });
+    return bytApiLoading;
+}
+
+function canSeeBcensor() {
+    return admin || king;
+}
+
+function syncByoutubeCensor() {
+    if (!bytScreen) {
+        if (bytCensor) {
+            bytCensor.remove();
+            bytCensor = null;
+        }
+        return;
+    }
+    if (byoutubeCensored && !canSeeBcensor()) {
+        if (!bytCensor) {
+            bytCensor = document.createElement("div");
+            bytCensor.id = "byt_censor";
+            bytCensor.textContent = "Censored for your eyes! (audio is still playing)";
+            bytCensor.style.cssText = "position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;background:#000;color:#fff;font:bold 28px Tahoma,sans-serif;z-index:1;pointer-events:none;text-shadow:0 2px 8px #000;";
+            document.body.prepend(bytCensor);
+        }
+    } else if (bytCensor) {
+        bytCensor.remove();
+        bytCensor = null;
+    }
+}
+
+function setRecaptchaVisibility(visible) {
+    const badge = document.querySelector('.grecaptcha-badge');
+    const container = document.getElementById('recaptcha-container');
+    if (!badge && !container) return;
+    const show = Boolean(visible);
+    if (badge) {
+        badge.style.display = show ? "block" : "none";
+        badge.style.visibility = show ? "visible" : "hidden";
+    }
+    if (container) {
+        container.style.display = show ? "block" : "none";
+        container.style.visibility = show ? "visible" : "hidden";
+    }
+}
+
+function hideByoutube() {
+    if (bytPlayer) {
+        try { bytPlayer.destroy(); } catch (e) {}
+        bytPlayer = null;
+    }
+    if (bytScreen) {
+        if (bytScreen.tagName === "VIDEO") {
+            bytScreen.pause();
+            bytScreen.removeAttribute("src");
+            bytScreen.load();
+        } else if (bytScreen.tagName === "IFRAME") {
+            bytScreen.src = "about:blank";
+        }
+        bytScreen.remove();
+        bytScreen = null;
+        bytCurrentSpeed = 1;
+    }
+    if (bytResume) {
+        window.removeEventListener("click", bytResume);
+        window.removeEventListener("keydown", bytResume);
+        bytResume = null;
+    }
+    if (bytCensor) {
+        bytCensor.remove();
+        bytCensor = null;
+    }
+let logo = document.getElementById("byt_tv_logo");
+    if (logo) logo.remove();
+    byoutubeCensored = false;
+    document.body.classList.remove("byoutube-active");
+    setRecaptchaVisibility(true);
+    syncVideoBackdrop();
+}
+
+function showByoutube(id, list = "", elapsedMs = 0, speed = 1, onEnded = null) {
+    hideByoutube();
+    bytCurrentSpeed = speed;
+
+    let existingLogo = document.getElementById("byt_tv_logo");
+    if (existingLogo) existingLogo.remove();
+
+    let bytLogo = document.createElement("img");
+    bytLogo.id = "byt_tv_logo";
+    bytLogo.src = "./img/desktop/bonzitv.png";
+    // Fixed at top-right, 150px wide, positioned above the iframe (z-index: 1)
+    bytLogo.style.cssText = "position:fixed;top:0;right:0;width:250px;height:auto;z-index:1;pointer-events:none;";
+    document.body.appendChild(bytLogo);
+
+    let safeId = String(id || "").replace(/[^A-Za-z0-9_-]/g, "");
+    let safeList = String(list || "").replace(/[^A-Za-z0-9_-]/g, "");
+    // elapsedMs is computed from the server clock by the caller, so a fresh
+    // /byoutube starts at 0 instead of seeking to a clock-skewed position.
+    let start = Math.max(0, Math.floor(Number(elapsedMs || 0) / 1000));
+
+    if (safeList) {
+        let startArg = start > 0 ? `&start=${start}` : "";
+        bytScreen = document.createElement("iframe");
+        bytScreen.id = "byt_screen";
+        bytScreen.credentialless = true;
+        bytScreen.src = safeId
+            ? `https://www.youtube-nocookie.com/embed/${safeId}?autoplay=1&loop=1&list=${safeList}&controls=0&modestbranding=1&playsinline=1${startArg}`
+            : `https://www.youtube-nocookie.com/embed/videoseries?autoplay=1&loop=1&list=${safeList}&controls=0&modestbranding=1&playsinline=1${startArg}`;
+        bytScreen.allow = "autoplay; encrypted-media";
+        bytScreen.referrerPolicy = "strict-origin-when-cross-origin";
+        bytScreen.style.cssText = "position:fixed;inset:0;width:100%;height:100%;border:0;z-index:0;pointer-events:none;";
+        document.body.prepend(bytScreen);
+    } else {
+        // Single video, no playlist: use the IFrame Player API (instead of the
+        // old loop=1&playlist=id trick) so onStateChange can tell us when
+        // playback actually ends, which is what lets BonziTV take over after.
+        let container = document.createElement("div");
+        container.id = "byt_screen";
+        container.style.cssText = "position:fixed;inset:0;width:100%;height:100%;border:0;z-index:0;pointer-events:none;";
+        document.body.prepend(container);
+        bytScreen = container;
+
+        loadYouTubeIframeApi().then(() => {
+            if (bytScreen !== container) return;
+            bytPlayer = new YT.Player(container, {
+                host: "https://www.youtube-nocookie.com",
+                videoId: safeId,
+                width: "100%",
+                height: "100%",
+                playerVars: {
+                    autoplay: 1,
+                    controls: 0,
+                    modestbranding: 1,
+                    playsinline: 1,
+                    start: start,
+                },
+                events: {
+                    onReady: (e) => {
+                        if (bytScreen !== container) {
+                            try { e.target.destroy(); } catch (err) {}
+                            return;
+                        }
+                        try { e.target.setPlaybackRate(bytCurrentSpeed); } catch (err) {}
+                        let iframe = e.target.getIframe();
+                        iframe.id = "byt_screen";
+                        iframe.style.cssText = "position:fixed;inset:0;width:100%;height:100%;border:0;z-index:0;pointer-events:none;";
+                        bytScreen = iframe;
+                        syncVideoBackdrop();
+                    },
+                    onStateChange: (e) => {
+                        if (bytPlayer === e.target && e.data === YT.PlayerState.ENDED) {
+                            reportByoutubeEnded();
+                            if (typeof onEnded === "function") onEnded();
+                        }
+                    },
+                },
+            });
+        });
+    }
+
+    document.body.classList.add("byoutube-active");
+    setRecaptchaVisibility(false);
+    syncByoutubeCensor();
+    syncVideoBackdrop();
+}
+
+function showByoutubeVideo(url, elapsedMs = 0, speed = 1) {
+    hideByoutube();
+    if (!/^https?:\/\//i.test(String(url))) return;
+    bytScreen = document.createElement("video");
+    bytScreen.id = "byt_screen";
+    bytScreen.src = url;
+    bytScreen.autoplay = true;
+    bytScreen.playsInline = true;
+    bytScreen.controls = false;
+    bytCurrentSpeed = speed;
+    bytScreen.style.cssText = "position:fixed;inset:0;width:100%;height:100%;border:0;z-index:0;pointer-events:none;object-fit:contain;background:#000;";
+
+    let offsetMs = Number(elapsedMs || 0);
+    bytScreen.addEventListener("loadedmetadata", () => {
+        if (offsetMs > 0 && isFinite(bytScreen.duration) && bytScreen.duration > 0) {
+            bytScreen.currentTime = offsetMs / 1000;
+            bytScreen.playbackRate = bytCurrentSpeed;
+        }
+    });
+    bytScreen.addEventListener("ended", reportByoutubeEnded);
+
+    bytScreen.play().catch(() => {});
+    // Autoplay-with-audio is often blocked until the user interacts; retry play
+    // on the next click/keypress while the video is up.
+    bytResume = () => { if (bytScreen) bytScreen.play().catch(() => {}); };
+    window.addEventListener("click", bytResume);
+    window.addEventListener("keydown", bytResume);
+
+    document.body.prepend(bytScreen);
+
+    document.body.classList.add("byoutube-active");
+    setRecaptchaVisibility(false);
+    syncByoutubeCensor();
+    syncVideoBackdrop();
+}
+
+socket.on("byoutube", (data) => {
+    if (settings.get("disableBackgroundYouTube")) {
+        hideByoutube();
+        return;
+    }
+
+    let id = (data.vid || "").replace(/[^A-Za-z0-9_-]/g, "");
+    let list = (data.list || "").replace(/[^A-Za-z0-9_-]/g, "");
+    let video = data.video || "";
+    let targetSpeed = Number(data.speed) || 1;
+    byoutubeCensored = !!data.censored;
+
+    let isSameTrack = false;
+    if (bytScreen) {
+        if (video && bytScreen.tagName === "VIDEO" && bytScreen.src === video) {
+            isSameTrack = true;
+        } else if ((id || list) && bytScreen.tagName === "IFRAME") {
+            isSameTrack = true;
+        }
+    }
+
+    if (isSameTrack && bytGen === Number(data.gen)) {
+        bytCurrentSpeed = targetSpeed;
+        if (bytPlayer && typeof bytPlayer.setPlaybackRate === "function") {
+            try { bytPlayer.setPlaybackRate(targetSpeed); } catch (e) {}
+        } else if (bytScreen && bytScreen.tagName === "VIDEO") {
+            bytScreen.playbackRate = targetSpeed;
+        }
+        return;
+    }
+
+    bytGen = Number(data.gen) || 0;
+
+    let startedAt = Number(data.startedAt || 0);
+    let serverNow = Number(data.now) || Date.now();
+    let elapsedMs = startedAt > 0 ? Math.max(0, serverNow - startedAt) : 0;
+    
+    if (video) showByoutubeVideo(video, elapsedMs, targetSpeed);
+    else if (id || list) showByoutube(id, list, elapsedMs, targetSpeed);
+    else hideByoutube();
+});
+
+let frutigerState = null;
+
+function startFrutiger() {
+    if (window.__frutigerCubeRunning__) {
+        alert('YOU CANNOT PLAY THE SCRIPT AT THE SAME TIME');
+        return;
+    }
+    window.__frutigerCubeRunning__ = true;
+
+    const content = document.getElementById('content') || document.body;
+
+    const state = {
+        running: true,
+        rafId: null,
+        audio: null,
+        canvas: null,
+        content: content,
+        resizeCanvas: null,
+        handleInteraction: null,
+        prevStyle: {
+            position: content.style.position,
+            backgroundColor: content.style.backgroundColor,
+            overflow: content.style.overflow,
+        },
+    };
+    frutigerState = state;
+
+    if (window.getComputedStyle(content).position === 'static') {
+        content.style.position = 'relative';
+    }
+
+    content.style.backgroundColor = '#eef6fc';
+    content.style.overflow = 'hidden';
+
+    const rawTracks = [
+        'https://files.catbox.moe/yaqyfq.mp3',
+        'https://files.catbox.moe/kw2xet.mp3',
+        'https://files.catbox.moe/l9fn5r.mp3',
+        'https://files.catbox.moe/y5v1bh.mp3',
+        'https://files.catbox.moe/ui92xa.mp3'
+    ];
+
+    function shufflePlaylist(array) {
+        let currentIndex = array.length, randomIndex;
+        while (currentIndex !== 0) {
+            randomIndex = Math.floor(Math.random() * currentIndex);
+            currentIndex--;
+            [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+        }
+        return array;
+    }
+
+    const playlist = shufflePlaylist([...rawTracks]);
+    let currentTrackIndex = 0;
+    const audio = new Audio();
+    state.audio = audio;
+    let isAudioPlaying = false;
+
+    function playNextTrack() {
+        if (playlist.length === 0 || isAudioPlaying) return;
+        audio.src = playlist[currentTrackIndex];
+        audio.play()
+            .then(() => { isAudioPlaying = true; })
+            .catch(err => { isAudioPlaying = false; });
+        currentTrackIndex = (currentTrackIndex + 1) % playlist.length;
+    }
+
+    audio.addEventListener('ended', () => {
+        isAudioPlaying = false;
+        playNextTrack();
+    });
+
+    function handleInteraction() {
+        if (!isAudioPlaying) playNextTrack();
+    }
+    state.handleInteraction = handleInteraction;
+    window.addEventListener('click', handleInteraction, { once: true });
+    window.addEventListener('keydown', handleInteraction, { once: true });
+    playNextTrack();
+
+    const canvas = document.createElement('canvas');
+    state.canvas = canvas;
+    canvas.setAttribute('style', `
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        z-index: 1 !important;
+        pointer-events: none !important;
+    `);
+    content.insertBefore(canvas, content.firstChild);
+
+    const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false });
+    if (!gl) {
+        stopFrutiger();
+        return;
+    }
+
+    gl.getExtension('OES_standard_derivatives');
+
+    function resizeCanvas() {
+        canvas.width = content.clientWidth;
+        canvas.height = content.clientHeight;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+    state.resizeCanvas = resizeCanvas;
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    const NUM_BUBBLES = 12;
+    const bubbles = [];
+    for (let i = 0; i < NUM_BUBBLES; i++) {
+        bubbles.push({
+            x: Math.random() * 2 - 1,
+            y: Math.random() * 2 - 1.5,
+            z: Math.random() * 0.4 - 0.2,
+            size: Math.random() * 0.09 + 0.05,
+            speedY: Math.random() * 0.12 + 0.08,
+            rotSpeedX: Math.random() * 1.5 + 0.5,
+            rotSpeedY: Math.random() * 1.5 + 0.5,
+            wobbleSpeed: Math.random() * 3 + 2,
+            wobbleAmp: Math.random() * 0.04 + 0.01,
+            seed: Math.random() * 100
+        });
+    }
+
+    const vsSource = `
+        attribute vec3 a_position;
+        attribute vec2 a_texCoord;
+        varying vec2 v_texCoord;
+        varying vec3 v_pos;
+
+        uniform mat4 u_matrix;
+
+        void main() {
+            v_texCoord = a_texCoord;
+            v_pos = a_position;
+            gl_Position = u_matrix * vec4(a_position, 1.0);
+        }
+    `;
+
+    const fsSource = `
+        precision mediump float;
+        varying vec2 v_texCoord;
+        varying vec3 v_pos;
+
+        uniform float u_time;
+        uniform int u_renderMode;
+        uniform float u_cubeAlpha;
+        uniform float u_whiteProgress;
+
+        float getWaveHeight(vec2 p, float time) {
+            float h = 0.0;
+            h += sin(p.x * 2.5 + time * 1.2) * 0.12;
+            h += sin(p.y * 3.0 - time * 1.5 + p.x * 1.5) * 0.09;
+            h += cos(p.x * 7.0 + p.y * 6.0 + time * 2.8) * 0.025;
+            h += sin(-p.y * 14.0 + time * 4.0) * 0.01;
+            return h;
+        }
+
+        void main() {
+            if (u_renderMode == 0) {
+                vec2 uv = v_texCoord * 2.0 - 1.0;
+
+                float height = getWaveHeight(uv * 1.5, u_time);
+
+                float eps = 0.02;
+                float hX = getWaveHeight((uv + vec2(eps, 0.0)) * 1.5, u_time);
+                float hY = getWaveHeight((uv + vec2(0.0, eps)) * 1.5, u_time);
+
+                vec3 normal = normalize(vec3((height - hX) / eps, (height - hY) / eps, 1.0));
+
+                vec2 refractedUV = v_texCoord + normal.xy * 0.04;
+
+                refractedUV.y += u_time * 0.1;
+                refractedUV.x += u_time * 0.05;
+
+                vec2 check = floor(refractedUV * 10.0);
+                float pattern = mod(check.x + check.y, 2.0);
+                vec3 color1 = vec3(0.85, 0.94, 0.99);
+                vec3 color2 = vec3(0.70, 0.85, 0.95);
+                vec3 finalCheck = mix(color1, color2, pattern);
+
+                vec2 gridCoord = fract(refractedUV * 10.0);
+                float gridLine = step(0.95, gridCoord.x) + step(0.95, gridCoord.y);
+                finalCheck = mix(finalCheck, vec3(0.55, 0.78, 0.95), gridLine * 0.5);
+
+                vec3 lightDir = normalize(vec3(0.3, 0.6, 0.75));
+                float specPower = pow(max(dot(normal, lightDir), 0.0), 45.0);
+                vec3 sunGlint = vec3(1.0, 1.0, 1.0) * specPower * 0.75;
+
+                float caustic = smoothstep(0.02, 0.1, abs(height)) * 0.15;
+
+                float fresnel = pow(1.0 - max(normal.z, 0.0), 3.0) * 0.35;
+
+                vec3 finalLiquidColor = finalCheck + sunGlint + vec3(caustic) + vec3(fresnel * 0.4);
+                gl_FragColor = vec4(finalLiquidColor, 0.65);
+            }
+            else if (u_renderMode == 1) {
+                vec3 baseGradient = mix(vec3(0.05, 0.4, 0.9), vec3(0.4, 0.8, 1.0), v_texCoord.y + sin(u_time) * 0.1);
+                float gloss = pow(1.0 - distance(v_texCoord, vec2(0.3, 0.75)), 3.5) * 0.45;
+                baseGradient += vec3(gloss);
+
+                float borderX = smoothstep(0.0, 0.05, v_texCoord.x) * smoothstep(1.0, 0.95, v_texCoord.x);
+                float borderY = smoothstep(0.0, 0.05, v_texCoord.y) * smoothstep(1.0, 0.95, v_texCoord.y);
+                float edgeMask = 1.0 - (borderX * borderY);
+                baseGradient = mix(baseGradient, vec3(1.0, 1.0, 1.0), edgeMask * 0.7);
+
+                vec3 mixedOutColor = mix(baseGradient, vec3(1.0), u_whiteProgress);
+                gl_FragColor = vec4(mixedOutColor, 0.95) * u_cubeAlpha;
+            }
+            else {
+                vec2 uv = v_texCoord * 2.0 - 1.0;
+                float dist = length(uv);
+                if (dist > 1.0) discard;
+
+                float zNormal = sqrt(1.0 - dist * dist);
+                vec3 normal = vec3(uv.x, uv.y, zNormal);
+
+                float fresnel = pow(1.0 - normal.z, 2.5);
+                vec3 lightDir = normalize(vec3(-0.4, 0.5, 0.8));
+                float specPower = pow(max(dot(normal, lightDir), 0.0), 32.0);
+                float specular = smoothstep(0.1, 0.9, specPower) * 0.75;
+                float rimLight = pow(1.0 - max(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0), 4.0) * 0.4;
+
+                vec3 iridescence = vec3(
+                    sin(normal.x * 2.5 + u_time) * 0.15 + 0.85,
+                    sin(normal.y * 3.0 + u_time + 2.0) * 0.12 + 0.88,
+                    sin(normal.z * 2.0 + u_time + 4.0) * 0.18 + 0.82
+                );
+
+                vec3 bubbleColor = mix(vec3(0.35, 0.70, 0.95), iridescence, fresnel);
+                bubbleColor += vec3(specular + rimLight);
+                float alpha = mix(0.18, 0.80, fresnel) + specular;
+
+                gl_FragColor = vec4(bubbleColor, alpha * 0.85);
+            }
+        }
+    `;
+
+    function createShader(gl, type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        return shader;
+    }
+
+    const program = gl.createProgram();
+    gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, vsSource));
+    gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, fsSource));
+    gl.linkProgram(program);
+    gl.useProgram(program);
+
+    const bgVertices = [
+        -1, -1,  0, 0,
+         1, -1,  1, 0,
+        -1,  1,  0, 1,
+        -1,  1,  0, 1,
+         1, -1,  1, 0,
+         1,  1,  1, 1,
+    ];
+
+    const cubeVertices = [
+        -0.3, -0.3,  0.3,  0, 0,   0.3, -0.3,  0.3,  1, 0,   0.3,  0.3,  0.3,  1, 1,
+        -0.3, -0.3,  0.3,  0, 0,   0.3,  0.3,  0.3,  1, 1,  -0.3,  0.3,  0.3,  0, 1,
+        -0.3, -0.3, -0.3,  0, 0,  -0.3,  0.3, -0.3,  0, 1,   0.3,  0.3, -0.3,  1, 1,
+        -0.3, -0.3, -0.3,  0, 0,   0.3,  0.3, -0.3,  1, 1,   0.3, -0.3, -0.3,  1, 0,
+        -0.3,  0.3, -0.3,  0, 0,  -0.3,  0.3,  0.3,  0, 1,   0.3,  0.3,  0.3,  1, 1,
+        -0.3,  0.3, -0.3,  0, 0,   0.3,  0.3,  0.3,  1, 1,   0.3,  0.3, -0.3,  1, 0,
+        -0.3, -0.3, -0.3,  0, 0,   0.3, -0.3, -0.3,  1, 0,   0.3, -0.3,  0.3,  1, 1,
+        -0.3, -0.3, -0.3,  0, 0,   0.3, -0.3,  0.3,  1, 1,  -0.3, -0.3,  0.3,  0, 1,
+         0.3, -0.3, -0.3,  0, 0,   0.3,  0.3, -0.3,  0, 1,   0.3,  0.3,  0.3,  1, 1,
+         0.3, -0.3, -0.3,  0, 0,   0.3,  0.3,  0.3,  1, 1,   0.3, -0.3,  0.3,  1, 0,
+        -0.3, -0.3, -0.3,  0, 0,  -0.3, -0.3,  0.3,  1, 0,  -0.3,  0.3,  0.3,  1, 1,
+        -0.3, -0.3, -0.3,  0, 0,  -0.3,  0.3,  0.3,  1, 1,  -0.3,  0.3, -0.3,  0, 1,
+    ];
+
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+
+    function identityMatrix() {
+        return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+    }
+
+    function rotateX(m, angle) {
+        const c = Math.cos(angle), s = Math.sin(angle);
+        const m1 = m[4], m5 = m[8];
+        m[4] = m1 * c + m5 * s;   m[5] = m[5] * c + m[9] * s;
+        m[6] = m[6] * c + m[10] * s; m[7] = m[7] * c + m[11] * s;
+        m[8] = m5 * c - m1 * s;   m[9] = m[9] * c - m[5] * s;
+        m[10] = m[10] * c - m[6] * s; m[11] = m[11] * c - m[7] * s;
+    }
+
+    function rotateY(m, angle) {
+        const c = Math.cos(angle), s = Math.sin(angle);
+        const m0 = m[0], m1 = m[1], m2 = m[2], m3 = m[3], m5 = m[8];
+        m[0] = m0 * c - m5 * s;   m[1] = m1 * c - m[9] * s;
+        m[2] = m2 * c - m[10] * s; m[3] = m3 * c - m[11] * s;
+        m[8] = m0 * s + m5 * c;   m[9] = m1 * s + m[9] * c;
+        m[10] = m2 * s + m[10] * c; m[11] = m3 * s + m[11] * c;
+    }
+
+    let startTime = null;
+    let lastTime = 0;
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.DEPTH_TEST);
+
+    function renderLoop(now) {
+        if (!frutigerState || !frutigerState.running) return;
+
+        if (!startTime) startTime = now;
+        const elapsed = (now - startTime) / 1000;
+        const deltaTime = elapsed - lastTime;
+        lastTime = elapsed;
+
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        let whiteProgress = 0.0;
+        let cubeAlpha = 1.0;
+
+        if (elapsed > 2.0) {
+            const stageTime = elapsed - 2.0;
+            whiteProgress = Math.min(stageTime / 0.05, 1.0);
+            if (stageTime > 0.05) {
+                cubeAlpha = Math.max(1.0 - (stageTime - 0.05) / 0.3, 0.0);
+            }
+        }
+
+        let aPos = gl.getAttribLocation(program, "a_position");
+        let aTex = gl.getAttribLocation(program, "a_texCoord");
+
+        gl.disable(gl.DEPTH_TEST);
+        gl.uniform1i(gl.getUniformLocation(program, "u_renderMode"), 0);
+        gl.uniform1f(gl.getUniformLocation(program, "u_time"), elapsed);
+        gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_matrix"), false, identityMatrix());
+
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(bgVertices), gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(aPos);
+        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 16, 0);
+        gl.enableVertexAttribArray(aTex);
+        gl.vertexAttribPointer(aTex, 2, gl.FLOAT, false, 16, 8);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        if (cubeAlpha > 0.0) {
+            gl.enable(gl.DEPTH_TEST);
+            gl.uniform1i(gl.getUniformLocation(program, "u_renderMode"), 1);
+            gl.uniform1f(gl.getUniformLocation(program, "u_whiteProgress"), whiteProgress);
+            gl.uniform1f(gl.getUniformLocation(program, "u_cubeAlpha"), cubeAlpha);
+
+            const matrix = identityMatrix();
+            rotateX(matrix, elapsed * 1.9);
+            rotateY(matrix, elapsed * 1.3);
+            const aspect = canvas.width / canvas.height;
+            matrix[0] /= aspect;
+
+            gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_matrix"), false, matrix);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertices), gl.DYNAMIC_DRAW);
+            gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 20, 0);
+            gl.vertexAttribPointer(aTex, 2, gl.FLOAT, false, 20, 12);
+            gl.drawArrays(gl.TRIANGLES, 0, 36);
+        }
+
+        if (elapsed > 2.1) {
+            gl.enable(gl.DEPTH_TEST);
+            gl.uniform1i(gl.getUniformLocation(program, "u_renderMode"), 2);
+            gl.uniform1f(gl.getUniformLocation(program, "u_time"), elapsed);
+
+            const aspect = canvas.width / canvas.height;
+
+            bubbles.forEach(bubble => {
+                bubble.y += bubble.speedY * deltaTime;
+                const currentWobble = Math.sin(elapsed * bubble.wobbleSpeed + bubble.seed) * bubble.wobbleAmp;
+
+                if (bubble.y > 1.4) {
+                    bubble.y = -1.4;
+                    bubble.x = Math.random() * 2 - 1;
+                }
+
+                const bubbleMatrix = identityMatrix();
+                bubbleMatrix[0] = bubble.size / aspect;
+                bubbleMatrix[5] = bubble.size;
+                bubbleMatrix[10] = bubble.size;
+
+                rotateX(bubbleMatrix, elapsed * bubble.rotSpeedX);
+                rotateY(bubbleMatrix, elapsed * bubble.rotSpeedY);
+
+                bubbleMatrix[12] = bubble.x + currentWobble;
+                bubbleMatrix[13] = bubble.y;
+                bubbleMatrix[14] = bubble.z;
+
+                gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_matrix"), false, bubbleMatrix);
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertices), gl.DYNAMIC_DRAW);
+
+                gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 20, 0);
+                gl.vertexAttribPointer(aTex, 2, gl.FLOAT, false, 20, 12);
+                gl.drawArrays(gl.TRIANGLES, 0, 36);
+            });
+        }
+
+        frutigerState.rafId = requestAnimationFrame(renderLoop);
+    }
+
+    frutigerState.rafId = requestAnimationFrame(renderLoop);
+}
+
+function stopFrutiger() {
+    let s = frutigerState;
+    window.__frutigerCubeRunning__ = false;
+    if (!s) return;
+    s.running = false;
+    if (s.rafId) cancelAnimationFrame(s.rafId);
+    if (s.audio) {
+        try { s.audio.pause(); } catch (e) {}
+        s.audio.src = "";
+    }
+    if (s.resizeCanvas) window.removeEventListener("resize", s.resizeCanvas);
+    if (s.handleInteraction) {
+        window.removeEventListener("click", s.handleInteraction);
+        window.removeEventListener("keydown", s.handleInteraction);
+    }
+    if (s.canvas && s.canvas.parentNode) s.canvas.parentNode.removeChild(s.canvas);
+    if (s.content && s.prevStyle) {
+        s.content.style.position = s.prevStyle.position;
+        s.content.style.backgroundColor = s.prevStyle.backgroundColor;
+        s.content.style.overflow = s.prevStyle.overflow;
+    }
+    frutigerState = null;
+}
+
+function sendInput() {
+    let text = chat_message.value;
+    chat_message.value = "";
+    typing(false);
+    scope: if (text.length > 0) {
+    // Auto-detect YouTube URL anywhere in the message
+    let ytId = extractYoutubeId(text);
+    if (ytId && text[0] !== "/") {
+        socket.emit("command", {
+            command: "youtube",
+            args: ytId,
+        });
+        break scope;
+    }
+
+    if (quote) {
+		if (muted === true) return;
+        socket.emit("talk", {
+            text: text,
+            quote: quote,
+        });
+    } else if (text[0] === "/") {
+            let commandText = text.slice(1).trimStart();
+            let firstSpace = commandText.indexOf(" ");
+            let command = firstSpace === -1 ? commandText : commandText.slice(0, firstSpace);
+            let args = firstSpace === -1 ? "" : commandText.slice(firstSpace + 1);
+            if (command === "clear") {
+                lastUser = "";
+                chat_log_content.innerText = "";
+            } else if (command === "settings") {
+                openSettings();
+            } else if (command === "gravity" || command === "dolphin") {
+                dolphin();
+            } else if (command === "float" || command === "water") {
+                water();
+            } else if (command === "debug:bless") {
+                blessedPopup();
+            } else if (command === "debug:loud") {
+                setVolume(2);
+            } else if (command === "shuffle") {
+                for (let bonzi of bonzis.values()) {
+                    bonzi.shuffle();
+                }
+            } else if (command === "vaporwave") {
+                setLocalTheme("vaporwave", true);
+            } else if (command === "unvaporwave") {
+                setLocalTheme("vaporwave", false);
+            } else if (command === "frutiger") {
+                setLocalTheme("frutiger", true);
+            } else if (command === "unfrutiger") {
+                setLocalTheme("frutiger", false);
+            } else if (command === "acid") {
+                setLocalTheme("acid", true);
+            } else if (command === "unacid") {
+                setLocalTheme("acid", false);
+            } else if (command === "terminal") {
+                setLocalTheme("terminal", true);
+            } else if (command === "unterminal") {
+                setLocalTheme("terminal", false);
+            } else if (command === "voice") {
+                Dialog.alert("/voice has been removed.");
+            } else if (command === "ingredients") {
+                bonzis.get(me)?.ingredients(args);
+            } else if (command === "grin") {
+                bonzis.get(me)?.grin();
+            } else if (command === "grounded") {
+                bonzis.get(me)?.grounded(args);
+            } else if (isSelectableCommand(command) && !args.trim()) {
+                openSelectableDialog(command.toLowerCase());
+            } else {
+                socket.emit("command", {
+                    command: command,
+	                    args: args,
+                });
+            }
+        } else {
+			if (muted === true) return;
+            socket.emit("talk", {
+                text: text,
+            });
+        }
+    }
+    quote = null;
+    talkcard.hidden = true;
+}
+
+chat_log_button.onclick = () => {
+    chat_log_button.hidden = true;
+    chat_log.hidden = false;
+    window.onresize();
+};
+
+chat_log_mode_button.onclick = () => {
+    setChatLogView(chatLogView === "chat" ? "rank" : "chat");
+};
+
+chat_log_close.onclick = () => {
+    chat_log_button.hidden = false;
+    chat_log.hidden = true;
+};
+
+setChatLogView("chat");
+resetRankLogView();
+if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical);
+
+socket.on("connect", () => {
+    clearSocketReconnect();
+    if (connectionWatchdog) {
+        clearTimeout(connectionWatchdog);
+        connectionWatchdog = null;
+    }
+    if (!joined && !loginPending) showLoginReady();
+    if (joined) loginPending = true;
+    sendLoginWhenConnected();
+});
+
+connectionWatchdog = setTimeout(() => {
+    if (!socket.connected && !joined) {
+        login_load.hidden = true;
+        login_card.hidden = false;
+        setConnectionMessage("The server is taking too long to respond. Retrying...");
+    }
+}, 12000);
+
+connectSocket();
+
+let resizing = null;
+let resizeStartX = 0;
+let resizeStartY = 0;
+let resizeStartWidth = 0;
+let resizeStartHeight = 0;
+let resizeStartLeft = 0;
+let resizeStartTop = 0;
+let auditCenterDialog = null;
+let auditCenterRefreshTimer = null;
+
+class Dialog {
+    x;
+    y;
+    width;
+    height;
+    minWidth;
+    minHeight;
+    onclose;
+    element;
+    bodyElement;
+    closeElement;
+    headerElement;
+    
+    constructor(opt = {}) {
+        if (opt.title == null) opt.title = "Window";
+        opt.width = opt.width || 400;
+        this.x = opt.x || 0;
+        this.y = opt.y || 0;
+        this.width = opt.width;
+        this.height = opt.height;
+        this.minWidth = opt.minWidth || 100;
+        this.minHeight = opt.minHeight || 50;
+        this.onclose = opt.onclose || (() => {});
+        this.element = document.createElement("div");
+        if (opt.class) this.element.className = opt.class;
+        this.element.classList.add("window");
+        this.element.innerHTML = `
+        <div class="window_header">
+        ${sanitize(opt.title)}
+        <div class="window_close"></div>
+        </div>
+        <div class="window_body">
+        <div class="window_content${ opt.bodyClass ? ` ${opt.bodyClass}` : ""}">
+        </div>
+        </div>
+        </div>
+        ${ opt.resizable !== false ? `
+            <div class="resize_nw"></div>
+            <div class="resize_ne"></div>
+            <div class="resize_sw"></div>
+            <div class="resize_se"></div>
+            <div class="resize_n"></div>
+            <div class="resize_w"></div>
+            <div class="resize_s"></div>
+            <div class="resize_e"></div>
+        ` : ""}
+        `;
+        this.move(this.x, this.y);
+        this.closeElement = this.element.querySelector(".window_close");
+        this.headerElement = this.element.querySelector(".window_header");
+        this.bodyElement = this.element.querySelector(".window_content");
+        this.element.style.position = "absolute";
+        this.element.style.zIndex = lastZ++ + 9999;
+        this.headerElement.onpointerdown = (e) => {
+            dragged = this;
+            dragX = e.pageX - this.x;
+            dragY = e.pageY - this.y;
+        };
+        this.closeElement.onclick = () => {
+            this.element.remove();
+            this.onclose();
+        };
+        this.element.onpointerdown = () => {
+            this.focus()
+        };
+        this.element.style.width = `${opt.width}px`;
+        if(opt.height) this.element.style.height = `${opt.height}px`;
+        this.bodyElement.innerHTML = opt.html ?? "";
+        if (opt.resizable !== false) {
+            const handles = ["nw", "ne", "sw", "se", "n", "w", "s", "e"];
+            for (let handle of handles) {
+                let el = this.element.querySelector(`.resize_${handle}`);
+                el.onpointerdown = (e) => {
+                    resizing = { dialog: this, handle };
+                    resizeStartX = e.pageX;
+                    resizeStartY = e.pageY;
+                    resizeStartWidth = this.width;
+                    resizeStartHeight = this.height;
+                    resizeStartLeft = this.x;
+                    resizeStartTop = this.y;
+                };
+            }
+        }
+        content.appendChild(this.element);
+        if (!opt.height) {
+            let height = this.element.getBoundingClientRect().height;
+            this.height = height;
+            this.element.style.height = `${this.height}px`;
+        }
+        if (opt.center) {
+            this.move(window.innerWidth / 2 - this.width / 2, window.innerHeight / 2 - this.height / 2);
+        }
+    }
+    move(x, y) {
+        this.x = x;
+        this.y = y;
+        this.element.style.left = `${x}px`;
+        this.element.style.top = `${y}px`;
+    }
+
+    resize(w, h, dir = {vertical: SOUTH, horizontal: EAST}) {
+        w = Math.max(this.minWidth, w);
+        h = Math.max(this.minHeight, h);
+        if (dir.vertical === NORTH) {
+            this.y -= h - this.height;
+        }
+        if (dir.horizontal === WEST) {
+            this.x -= w - this.width;
+        }
+        this.width = w;
+        this.height = h;
+        this.element.style.width = `${this.width}px`;
+        this.element.style.height = `${this.height}px`;
+        this.element.style.left = `${this.x}px`;
+        this.element.style.top = `${this.y}px`;
+    }
+
+    focus() {
+        this.element.style.zIndex = lastZ++ + 9999;
+    }
+
+    static alert(opt, cb = () => {}) {
+        if (typeof opt === "string") opt = { text: opt };
+        if (opt.text != null) opt.html = sanitize(opt.text);
+        let dialog = new Dialog({
+            width: 400,
+            title: opt.title ?? "Alert",
+            bodyClass: "alert_body",
+            center: true,
+            resizable: false,
+            html: `
+                <div style="display: flex; flex-direction: row; gap: 10px;">
+                    <img src="/img/desktop/error.png" style="padding-left: 10px;" width="32" height="32">
+                    <div class="alert_text">${opt.html}</div>
+                </div>
+                <div class="alert_button_row">
+                    <button class="xp-button ok">OK</button>
+                </div>
+            `,
+        });
+		let ok = dialog.element.querySelector(".ok");
+        ok.onclick = () => {
+            dialog.element.remove();
+            cb();
+        };
+		ok.focus();
+        return dialog;
+    }
+
+    static wordFilterManager(data) {
+        const previousDialog = document.querySelector(".word_filter_dialog");
+        const previousSearch = previousDialog?.querySelector("[data-word-filter-search]")?.value || "";
+        previousDialog?.remove();
+
+        const categories = Array.isArray(data?.categories) ? data.categories : [];
+        const category = categories.find((entry) => entry.id === data?.category) || categories[0];
+        const rules = Array.isArray(data?.rules)
+            ? data.rules.filter((rule) => typeof rule?.pattern === "string" && typeof rule?.replacement === "string")
+            : [];
+        const categoryId = category?.id || "messages";
+        const categoryLabel = category?.label || "Messages and commands";
+        const ruleMarkup = rules.length
+            ? rules.map((rule, index) => {
+                const shortPattern = rule.pattern.length > 150 ? `${rule.pattern.slice(0, 147)}…` : rule.pattern;
+                const shortReplacement = rule.replacement.length > 110 ? `${rule.replacement.slice(0, 107)}…` : rule.replacement;
+                return `
+                    <article class="word_filter_rule" data-word-filter-index="${index}">
+                        <div class="word_filter_value">
+                            <span>REGEX</span>
+                            <code>${sanitize(shortPattern)}</code>
+                        </div>
+                        <div class="word_filter_value">
+                            <span>REPLACEMENT</span>
+                            <code>${sanitize(shortReplacement || "(empty)")}</code>
+                        </div>
+                        <div class="word_filter_rule_actions">
+                            <button type="button" class="word_filter_button word_filter_secondary" data-word-filter-action="edit" data-index="${index}">Edit</button>
+                            <button type="button" class="word_filter_button word_filter_delete" data-word-filter-action="delete" data-index="${index}">Remove</button>
+                        </div>
+                    </article>
+                `;
+            }).join("")
+            : `<div class="word_filter_empty">No filters in this category yet. Add one above.</div>`;
+
+        const width = Math.max(320, Math.min(960, window.innerWidth - 24));
+        const height = Math.max(320, Math.min(740, window.innerHeight - 24));
+        const dialog = new Dialog({
+            width,
+            height,
+            minWidth: Math.min(360, width),
+            minHeight: Math.min(360, height),
+            title: "Word Filter Manager",
+            class: "audit_center_dialog word_filter_dialog",
+            bodyClass: "audit_center_body",
+            center: true,
+            html: `
+                <main class="word_filter_shell" aria-label="Word filter manager">
+                    <header class="word_filter_intro">
+                        <div>
+                            <p class="word_filter_eyebrow">BONZIWORLD · BIG OWNER CONSOLE</p>
+                            <h1>Word Filter Manager</h1>
+                            <p>Edit live message, username, and godword leak filters.</p>
+                        </div>
+                        <div class="word_filter_total">
+                            <span>Active rules</span>
+                            <strong>${rules.length}</strong>
+                        </div>
+                    </header>
+                    <section class="word_filter_toolbar">
+                        <label>
+                            <span>Filter set</span>
+                            <select data-word-filter-category aria-label="Filter category">
+                                ${categories.map((entry) => `
+                                    <option value="${sanitize(String(entry.id))}" ${entry.id === categoryId ? "selected" : ""}>
+                                        ${sanitize(String(entry.label))}
+                                    </option>
+                                `).join("")}
+                            </select>
+                        </label>
+                        <label>
+                            <span>Search this filter set</span>
+                            <input type="search" data-word-filter-search placeholder="Find a pattern or replacement" aria-label="Search filters">
+                        </label>
+                    </section>
+                    <form class="word_filter_form" data-word-filter-form>
+                        <input type="hidden" data-word-filter-original>
+                        <label>
+                            <span>Regular expression <small>(global + Unicode sets)</small></span>
+                            <textarea data-word-filter-pattern maxlength="1000" rows="2" required spellcheck="false" placeholder="Enter a regular expression"></textarea>
+                        </label>
+                        <label>
+                            <span>Replacement <small>(leave blank to remove matches)</small></span>
+                            <textarea data-word-filter-replacement maxlength="500" rows="2" spellcheck="false" placeholder="Text to replace each match with"></textarea>
+                        </label>
+                        <div class="word_filter_form_actions">
+                            <button type="submit" class="word_filter_button" data-word-filter-submit>Add filter</button>
+                            <button type="button" class="word_filter_button word_filter_secondary" data-word-filter-cancel hidden>Cancel edit</button>
+                            <span data-word-filter-status role="status" aria-live="polite">${sanitize(String(data?.notice || "Changes take effect immediately and are saved across server restarts."))}</span>
+                        </div>
+                    </form>
+                    <div class="word_filter_list_header">
+                        <strong>${sanitize(categoryLabel)}</strong>
+                        <span data-word-filter-count>${rules.length} rules</span>
+                    </div>
+                    <div class="word_filter_list" data-word-filter-list>
+                        ${ruleMarkup}
+                        <div class="word_filter_empty" data-word-filter-search-empty hidden>No filters match that search.</div>
+                    </div>
+                    <footer class="word_filter_footer">
+                        <span>Patterns are validated before saving. Changes apply immediately.</span>
+                        <button type="button" class="word_filter_button word_filter_secondary word_filter_close">Close</button>
+                    </footer>
+                </main>
+            `,
+        });
+
+        const search = dialog.element.querySelector("[data-word-filter-search]");
+        const categorySelect = dialog.element.querySelector("[data-word-filter-category]");
+        const list = dialog.element.querySelector("[data-word-filter-list]");
+        const count = dialog.element.querySelector("[data-word-filter-count]");
+        const status = dialog.element.querySelector("[data-word-filter-status]");
+        const form = dialog.element.querySelector("[data-word-filter-form]");
+        const originalInput = dialog.element.querySelector("[data-word-filter-original]");
+        const patternInput = dialog.element.querySelector("[data-word-filter-pattern]");
+        const replacementInput = dialog.element.querySelector("[data-word-filter-replacement]");
+        const submitButton = dialog.element.querySelector("[data-word-filter-submit]");
+        const cancelButton = dialog.element.querySelector("[data-word-filter-cancel]");
+        const searchEmpty = dialog.element.querySelector("[data-word-filter-search-empty]");
+
+        const sendRequest = (request) => {
+            cmd(`managewordfilters ${JSON.stringify(request)}`);
+        };
+        const updateSearch = () => {
+            const query = search.value.trim().toLowerCase();
+            let visible = 0;
+            for (const row of list.querySelectorAll("[data-word-filter-index]")) {
+                const rule = rules[Number(row.dataset.wordFilterIndex)];
+                const matches = !query
+                    || rule.pattern.toLowerCase().includes(query)
+                    || rule.replacement.toLowerCase().includes(query);
+                row.hidden = !matches;
+                if (matches) visible++;
+            }
+            count.textContent = `${visible} of ${rules.length} rules`;
+            searchEmpty.hidden = visible !== 0 || rules.length === 0;
+        };
+        const clearEdit = () => {
+            form.reset();
+            originalInput.value = "";
+            submitButton.textContent = "Add filter";
+            cancelButton.hidden = true;
+            patternInput.focus();
+        };
+
+        search.value = previousSearch;
+        search.addEventListener("input", updateSearch);
+        categorySelect.addEventListener("change", () => {
+            search.value = "";
+            sendRequest({ operation: "list", category: categorySelect.value });
+        });
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            const originalPattern = originalInput.value;
+            const request = {
+                operation: originalPattern ? "update" : "add",
+                category: categorySelect.value,
+                pattern: patternInput.value,
+                replacement: replacementInput.value,
+            };
+            if (originalPattern) request.originalPattern = originalPattern;
+            status.textContent = "Saving filter changes…";
+            sendRequest(request);
+        });
+        cancelButton.addEventListener("click", clearEdit);
+        list.addEventListener("click", (event) => {
+            const button = event.target.closest("[data-word-filter-action]");
+            if (!button) return;
+            const rule = rules[Number(button.dataset.index)];
+            if (!rule) return;
+
+            if (button.dataset.wordFilterAction === "edit") {
+                originalInput.value = rule.pattern;
+                patternInput.value = rule.pattern;
+                replacementInput.value = rule.replacement;
+                submitButton.textContent = "Save changes";
+                cancelButton.hidden = false;
+                patternInput.focus();
+                return;
+            }
+
+            if (button.dataset.wordFilterAction === "delete"
+                && window.confirm("Remove this word filter? This takes effect immediately.")) {
+                sendRequest({
+                    operation: "delete",
+                    category: categorySelect.value,
+                    originalPattern: rule.pattern,
+                });
+            }
+        });
+        dialog.element.querySelector(".word_filter_close").onclick = () => dialog.element.remove();
+        updateSearch();
+        return dialog;
+    }
+
+    static auditCenter(data) {
+        const audit = data?.audit && typeof data.audit === "object" ? data.audit : {};
+        const events = Array.isArray(audit.events) ? audit.events : [];
+        const requestedLimit = Math.max(1, Math.min(100, Number(audit.limit) || 50));
+
+        if (auditCenterDialog?.element.isConnected) {
+            auditCenterDialog.closeElement.click();
+        }
+        if (auditCenterRefreshTimer) {
+            clearTimeout(auditCenterRefreshTimer);
+            auditCenterRefreshTimer = null;
+        }
+
+        const width = Math.max(320, Math.min(920, window.innerWidth - 24));
+        const height = Math.max(300, Math.min(700, window.innerHeight - 24));
+        let dialog;
+        dialog = new Dialog({
+            width,
+            height,
+            minWidth: Math.min(420, width),
+            minHeight: Math.min(360, height),
+            title: "BonziWORLD Audit Center",
+            class: "audit_center_dialog",
+            bodyClass: "audit_center_body",
+            center: true,
+            onclose: () => {
+                if (auditCenterDialog === dialog) auditCenterDialog = null;
+                if (auditCenterRefreshTimer) {
+                    clearTimeout(auditCenterRefreshTimer);
+                    auditCenterRefreshTimer = null;
+                }
+            },
+            html: `
+                <main class="audit-center" aria-label="BonziWORLD audit records">
+                    <header class="audit-center-header">
+                        <div>
+                            <p class="audit-center-eyebrow">BONZIWORLD · SERVER RECORDS</p>
+                            <h1>Audit Center</h1>
+                            <p class="audit-center-description">Recent staff and server actions recorded by BonziWORLD. Chat messages are not included.</p>
+                        </div>
+                        <div class="audit-center-loaded">
+                            <span>Records loaded</span>
+                            <strong data-audit-loaded>${events.length}</strong>
+                        </div>
+                    </header>
+                    <section class="audit-center-controls" aria-label="Search and filter audit records">
+                        <label class="audit-center-search">
+                            <span>Search records</span>
+                            <input type="search" data-audit-search placeholder="Action, staff member, target, details" autocomplete="off">
+                        </label>
+                        <label>
+                            <span>Action</span>
+                            <select data-audit-action-filter aria-label="Filter by action">
+                                <option value="all">All actions</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>Records</span>
+                            <select data-audit-limit aria-label="Number of recent records to load">
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </label>
+                        <button type="button" class="audit-center-refresh" data-audit-refresh>Refresh</button>
+                    </section>
+                    <div class="audit-center-status" data-audit-status role="status" aria-live="polite">
+                        ${events.length} of ${events.length} loaded records shown · newest first
+                    </div>
+                    <section class="audit-center-list" data-audit-list aria-label="Recent recorded actions"></section>
+                    <footer class="audit-center-footer">
+                        <span>Read-only view · timestamps shown in your local time</span>
+                        <button type="button" data-audit-close>Close</button>
+                    </footer>
+                </main>
+            `,
+        });
+        auditCenterDialog = dialog;
+
+        const search = dialog.element.querySelector("[data-audit-search]");
+        const actionFilter = dialog.element.querySelector("[data-audit-action-filter]");
+        const limitFilter = dialog.element.querySelector("[data-audit-limit]");
+        const list = dialog.element.querySelector("[data-audit-list]");
+        const status = dialog.element.querySelector("[data-audit-status]");
+        const refreshButton = dialog.element.querySelector("[data-audit-refresh]");
+        limitFilter.value = String(requestedLimit);
+
+        const actions = [...new Set(events.map((event) => String(event?.action || "unknown")))].sort();
+        for (const action of actions) {
+            const option = document.createElement("option");
+            option.value = action;
+            option.textContent = action.replaceAll("_", " ");
+            actionFilter.appendChild(option);
+        }
+
+        const formatTimestamp = (value) => {
+            const raw = String(value || "");
+            if (!raw) return "Time unavailable";
+            const parsed = new Date(`${raw.replace(" ", "T")}Z`);
+            if (Number.isNaN(parsed.getTime())) return raw;
+            return new Intl.DateTimeFormat(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short",
+            }).format(parsed);
+        };
+
+        const renderRecords = () => {
+            const query = search.value.trim().toLocaleLowerCase();
+            const selectedAction = actionFilter.value;
+            const filteredEvents = events.filter((event) => {
+                const action = String(event?.action || "unknown");
+                const searchableText = [
+                    action,
+                    event?.actor_name,
+                    event?.target_name,
+                    event?.details,
+                ].map((part) => String(part || "")).join(" ").toLocaleLowerCase();
+                return (selectedAction === "all" || action === selectedAction)
+                    && (!query || searchableText.includes(query));
+            });
+
+            list.replaceChildren();
+            status.textContent = events.length
+                ? `${filteredEvents.length} of ${events.length} loaded records shown · newest first`
+                : "No staff or server actions have been recorded yet.";
+
+            if (!filteredEvents.length) {
+                const empty = document.createElement("div");
+                empty.className = "audit-center-empty";
+                empty.textContent = events.length
+                    ? "No records match these filters. Change the search or action filter."
+                    : "No staff or server actions have been recorded yet.";
+                list.appendChild(empty);
+                return;
+            }
+
+            for (const event of filteredEvents) {
+                const row = document.createElement("article");
+                row.className = "audit-center-event";
+
+                const main = document.createElement("div");
+                main.className = "audit-center-event-main";
+
+                const heading = document.createElement("div");
+                heading.className = "audit-center-event-heading";
+                const action = document.createElement("strong");
+                action.className = "audit-center-action";
+                action.textContent = String(event?.action || "unknown").replaceAll("_", " ");
+                const time = document.createElement("time");
+                time.className = "audit-center-time";
+                time.textContent = formatTimestamp(event?.created_at);
+                if (event?.created_at) time.title = `${String(event.created_at)} UTC`;
+                heading.append(action, time);
+
+                const participants = document.createElement("div");
+                participants.className = "audit-center-participants";
+                const actor = document.createElement("strong");
+                actor.textContent = String(event?.actor_name || "Unknown staff member");
+                participants.appendChild(actor);
+                if (event?.target_name) {
+                    const arrow = document.createElement("span");
+                    arrow.className = "audit-center-arrow";
+                    arrow.setAttribute("aria-hidden", "true");
+                    arrow.textContent = "→";
+                    const target = document.createElement("span");
+                    target.textContent = String(event.target_name);
+                    participants.append(arrow, target);
+                }
+                main.append(heading, participants);
+
+                if (event?.details) {
+                    const details = document.createElement("p");
+                    details.className = "audit-center-details";
+                    details.textContent = String(event.details);
+                    main.appendChild(details);
+                }
+
+                row.appendChild(main);
+                list.appendChild(row);
+            }
+        };
+
+        search.addEventListener("input", renderRecords);
+        actionFilter.addEventListener("change", renderRecords);
+        refreshButton.addEventListener("click", () => {
+            refreshButton.disabled = true;
+            refreshButton.textContent = "Refreshing…";
+            status.textContent = "Requesting the latest audit records…";
+            cmd(`auditcenter ${limitFilter.value}`);
+            auditCenterRefreshTimer = setTimeout(() => {
+                if (refreshButton.isConnected) {
+                    refreshButton.disabled = false;
+                    refreshButton.textContent = "Refresh";
+                    status.textContent = "No response yet. You can try refreshing again.";
+                }
+                auditCenterRefreshTimer = null;
+            }, 8_000);
+        });
+        dialog.element.querySelector("[data-audit-close]").addEventListener("click", () => {
+            dialog.closeElement.click();
+        });
+
+        renderRecords();
+        search.focus();
+        return dialog;
+    }
+
+}
+
+let settingsDialog;
+let wordBlacklist = [];
+let customStyle = document.createElement("style");
+let customStyleEl = customStyle;
+// Dedicated <style> for the Themes background recolor, kept separate from the
+// user's custom CSS so the two never clobber each other.
+let bgThemeStyle = document.createElement("style");
+document.head.appendChild(customStyle);
+document.head.appendChild(bgThemeStyle);
+let customBackgroundStyle = document.createElement("style");
+document.head.appendChild(customBackgroundStyle);
+let acidThemeStyle = document.createElement("style");
+document.head.appendChild(acidThemeStyle);
+let terminalThemeStyle = document.createElement("style");
+document.head.appendChild(terminalThemeStyle);
+const localThemes = new Set();
+let serverThemeState = new Set();
+let forcedVaporwave = null;
+const supportedThemes = new Set(["vaporwave", "acid", "frutiger", "terminal"]);
+let themeAudio = null;
+let stopSynthThemeMusic = null;
+
+function stopThemeAudio() {
+    if (themeAudio) {
+        themeAudio.pause();
+        themeAudio.currentTime = 0;
+        themeAudio = null;
+    }
+    if (stopSynthThemeMusic) {
+        stopSynthThemeMusic();
+        stopSynthThemeMusic = null;
+    }
+}
+
+function startDreamcastMusic() {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const context = new AudioContext();
+    const master = context.createGain();
+    master.gain.value = 0.035;
+    master.connect(context.destination);
+    const notes = [293.66, 440, 392, 329.63, 293.66, 220, 246.94, 293.66];
+    let step = 0;
+    const playStep = () => {
+        if (context.state === "closed") return;
+        const now = context.currentTime;
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = step % 4 === 3 ? "triangle" : "sine";
+        oscillator.frequency.value = notes[step % notes.length];
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.55, now + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.72);
+        oscillator.connect(gain);
+        gain.connect(master);
+        oscillator.start(now);
+        oscillator.stop(now + 0.75);
+        step++;
+    };
+    playStep();
+    const timer = setInterval(playStep, 520);
+    stopSynthThemeMusic = () => {
+        clearInterval(timer);
+        context.close();
+    };
+}
+
+function startThemeAudio(mode) {
+    stopThemeAudio();
+    if (mode === "ps2") {
+        themeAudio = new Audio("./community-edition/sfx/ps2-startup.mp3");
+        themeAudio.volume = 0.35;
+        themeAudio.play().catch(() => {});
+    } else if (mode === "dreamcast") {
+        startDreamcastMusic();
+    }
+}
+
+const CUSTOM_BACKGROUND_DB = "bonziworld-custom-backgrounds";
+const CUSTOM_BACKGROUND_STORE = "backgrounds";
+const CUSTOM_BACKGROUND_MAX_BYTES = 20 * 1024 * 1024;
+const customBackgroundUrls = new Map();
+
+function openCustomBackgroundDb() {
+    return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+            reject(new Error("This browser does not support local background storage."));
+            return;
+        }
+        const request = indexedDB.open(CUSTOM_BACKGROUND_DB, 1);
+        request.onupgradeneeded = () => {
+            if (!request.result.objectStoreNames.contains(CUSTOM_BACKGROUND_STORE)) {
+                request.result.createObjectStore(CUSTOM_BACKGROUND_STORE);
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error("Could not open background storage."));
+    });
+}
+
+async function customBackgroundTransaction(mode, target, value) {
+    const db = await openCustomBackgroundDb();
+    try {
+        return await new Promise((resolve, reject) => {
+            const transaction = db.transaction(CUSTOM_BACKGROUND_STORE, mode);
+            const store = transaction.objectStore(CUSTOM_BACKGROUND_STORE);
+            const request = value === undefined
+                ? store.get(target)
+                : value === null
+                    ? store.delete(target)
+                    : store.put(value, target);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error || new Error("Background storage failed."));
+        });
+    } finally {
+        db.close();
+    }
+}
+
+function updateCustomBackgroundCss() {
+    const roomUrl = customBackgroundUrls.get("room");
+    const loginUrl = customBackgroundUrls.get("login");
+    customBackgroundStyle.textContent =
+        (roomUrl
+            ? `#content{background-image:url("${roomUrl}")!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;}`
+            : "") +
+        (loginUrl
+            ? `#page_login{background-image:url("${loginUrl}")!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;}`
+            : "");
+}
+
+function setCustomBackgroundStatus(message, isError = false) {
+    const status = document.getElementById("custom_background_status");
+    if (!status) return;
+    status.textContent = message;
+    status.style.color = isError ? "#a00000" : "";
+}
+
+function useCustomBackgroundBlob(target, blob) {
+    const oldUrl = customBackgroundUrls.get(target);
+    if (oldUrl) URL.revokeObjectURL(oldUrl);
+    if (blob) customBackgroundUrls.set(target, URL.createObjectURL(blob));
+    else customBackgroundUrls.delete(target);
+    updateCustomBackgroundCss();
+}
+
+async function loadCustomBackgrounds() {
+    for (const target of ["room", "login"]) {
+        try {
+            const blob = await customBackgroundTransaction("readonly", target);
+            if (blob instanceof Blob && blob.type.startsWith("image/")) {
+                useCustomBackgroundBlob(target, blob);
+            }
+        } catch (error) {
+            console.error("Could not load custom background:", error);
+        }
+    }
+}
+
+function chooseCustomBackground(target) {
+    if (target !== "room" && target !== "login") return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+            setCustomBackgroundStatus("Please choose an image file.", true);
+            return;
+        }
+        if (file.size > CUSTOM_BACKGROUND_MAX_BYTES) {
+            setCustomBackgroundStatus("That image is larger than 20 MB.", true);
+            return;
+        }
+        try {
+            await customBackgroundTransaction("readwrite", target, file);
+            useCustomBackgroundBlob(target, file);
+            setCustomBackgroundStatus(`${target === "room" ? "In-room" : "Login"} background saved.`);
+        } catch (error) {
+            console.error("Could not save custom background:", error);
+            setCustomBackgroundStatus("Could not save that background in this browser.", true);
+        }
+    };
+    input.click();
+}
+
+async function clearCustomBackground(target) {
+    if (target !== "room" && target !== "login") return;
+    try {
+        await customBackgroundTransaction("readwrite", target, null);
+        useCustomBackgroundBlob(target, null);
+        setCustomBackgroundStatus(`${target === "room" ? "In-room" : "Login"} background cleared.`);
+    } catch (error) {
+        console.error("Could not clear custom background:", error);
+        setCustomBackgroundStatus("Could not clear that background.", true);
+    }
+}
+
+async function themeify(url, audioMode = "") {
+  try {
+    if (!url) {
+      customStyle.textContent = "";
+      settings.set("customCSS", "");
+      const textarea = document.querySelector(".settings_textarea");
+      if (textarea) textarea.value = "";
+      stopThemeAudio();
+      return;
+    }
+    const response = await fetch(url);
+    
+    // Check if the request was successful
+    if (!response.ok) {      document.querySelector('.settings_textarea').value = ''; settings.set('customCSS', document.querySelector('.settings_textarea').value);
+      throw new Error(`Failed to fetch CSS. Status: ${response.status}`);
+
+    }
+    
+    // Read the response as a text string
+    const cssString = await response.text();
+    customStyle.textContent=cssString;
+    if(document.querySelector('.settings_textarea') !== null){document.querySelector('.settings_textarea').value = cssString; settings.set('customCSS', document.querySelector('.settings_textarea').value);}
+    startThemeAudio(audioMode);
+  } catch (error) {
+    console.error('Error fetching CSS:', error);
+  }
+}
+const settings = {
+    schema: {
+        hideImages: {
+            type: "boolean",
+            default: false,
+            xml: { tag: "hideImages", attr: "on" },
+        },
+        disableCrosscolors: {
+            type: "boolean",
+            default: false,
+            xml: { tag: "disableCrosscolors", attr: "on" },
+        },
+        disableDM: {
+            type: "boolean",
+            default: false,
+            xml: { tag: "disableDM", attr: "on" },
+        },
+        disableXss: {
+            type: "boolean",
+            default: false,
+        },
+        disableMassinject: {
+            type: "boolean",
+            default: false,
+        },
+
+        disableMediaQueueAutoOpen: {
+            type: "boolean",
+            default: false,
+            xml: { tag: "disableMediaQueueAutoOpen", attr: "on" },
+        },
+        classicBg: {
+            type: "boolean",
+            default: false,
+            xml: { tag: "classicBg", attr: "on" },
+            onLoad: (value) => document.body.classList.toggle("classic", value),
+        },
+        disableBackgroundYouTube: {
+    type: "boolean",
+    default: false,
+    xml: { tag: "disableBackgroundYouTube", attr: "on" },
+},
+        disableDvdBounce: {
+            type: "boolean",
+            default: false,
+            xml: { tag: "disableDvdBounce", attr: "on" },
+        },
+        disableServersideMovement: {
+            type: "boolean",
+            default: false,
+            xml: { tag: "disableServersideMovement", attr: "on" },
+        },
+        disableShadows: {
+            type: "boolean",
+            default: false,
+            xml: { tag: "disableShadows", attr: "on" },
+            onLoad: (value) => document.body.classList.toggle("no_shadows", value),
+        },
+        disableBubbleFade: {
+            type: "boolean",
+            default: false,
+            xml: { tag: "disableBubbleFade", attr: "on" },
+            onLoad: (value) => document.body.classList.toggle("no_bubble_fade", value),
+        },
+        disableLoginFade: {
+            type: "boolean",
+            default: false,
+            xml: { tag: "disableLoginFade", attr: "on" },
+        },
+        autoApply: {
+            type: "boolean",
+            default: false,
+            xml: { tag: "autoApply", attr: "on" },
+        },
+        autoColor: {
+            type: "string",
+            default: "",
+            xml: { tag: "autoColor", cdata: true },
+        },
+        autoHats: {
+            type: "string",
+            default: "",
+            xml: { tag: "autoHats", cdata: true },
+        },
+        autoCrosscolor: {
+            type: "string",
+            default: "",
+            xml: { tag: "autoCrosscolor", cdata: true },
+        },
+        autoCrosshats: {
+            type: "string",
+            default: "",
+            xml: { tag: "autoCrosshats", cdata: true },
+        },
+        autoTag: {
+            type: "string",
+            default: "",
+            xml: { tag: "autoTag", cdata: true },
+        },
+        volume: {
+            type: "number",
+            default: 90,
+            min: 0,
+            max: 100,
+            xml: { tag: "volume", attr: "value" },
+        },
+        ttsPitch: {
+            type: "number",
+            default: 50,
+            min: 15,
+            max: 125,
+            xml: { tag: "ttsPitch", attr: "value" },
+            onLoad: (value) => {
+                let pitch = clamp(Number(value), 15, 125);
+                if (!Number.isFinite(pitch)) pitch = 50;
+                settings.set("ttsPitch", pitch);
+            },
+        },
+        ttsSpeed: {
+            type: "number",
+            default: 175,
+            min: 125,
+            max: 275,
+            xml: { tag: "ttsSpeed", attr: "value" },
+            onLoad: (value) => {
+                let speed = clamp(Number(value), 125, 275);
+                if (!Number.isFinite(speed)) speed = 175;
+                settings.set("ttsSpeed", speed);
+            },
+        },
+        disableLocalVoiceSettings: {
+            type: "boolean",
+            default: false,
+            xml: { tag: "disableLocalVoiceSettings", attr: "on" },
+        },
+        wordBlacklist: {
+            type: "array",
+            default: "[]",
+            xml: { tag: "blacklist", items: "word" },
+            onLoad: (value) => { wordBlacklist = value; },
+        },
+        customCSS: {
+            type: "string",
+            default: "",
+            placeholder: "Enter custom CSS here",
+            xml: { tag: "customCSS", cdata: true },
+            onLoad: (value) => applyCustomCSS(value),
+        },
+        bgHue: {
+            type: "number",
+            default: 0,
+            min: 0,
+            max: 360,
+            xml: { tag: "bgHue", attr: "value" },
+            onLoad: () => applyBgTheme(),
+        },
+        bgSaturate: {
+            type: "number",
+            default: 100,
+            min: 0,
+            max: 200,
+            xml: { tag: "bgSaturate", attr: "value" },
+            onLoad: () => applyBgTheme(),
+        },
+        bgBrightness: {
+            type: "number",
+            default: 100,
+            min: 0,
+            max: 200,
+            xml: { tag: "bgBrightness", attr: "value" },
+            onLoad: () => applyBgTheme(),
+        },
+    },
+    layout: {
+        general: {
+            name: "General",
+            settings: [
+                {
+                    key: "hideImages",
+                    type: "checkbox",
+                    label: "Hide Images",
+                    description: "Hide images and videos in chat behind a click-to-reveal placeholder.",
+                },
+                {
+                    key: "disableCrosscolors",
+                    type: "checkbox",
+                    label: "Disable Crosscolors",
+                    description: "Show custom crosscolor images as the normal purple Bonzi on this device.",
+                    onChange: () => {
+                        for (const bonzi of bonzis.values()) bonzi.updateSprite();
+                    },
+                },
+                {
+                    key: "disableDM",
+                    type: "checkbox",
+                    label: "Disable DMs",
+                    description: "Stop other people from opening a Direct Message with you.",
+                    onChange: (value) => socket.emit("dmDisabled", value),
+                },
+                {
+                    key: "disableMediaQueueAutoOpen",
+                    type: "checkbox",
+                    label: "Don't auto-open Media Queue",
+                    description: "Janitors and above: stop the Media Queue from popping open every time an image or video is submitted. Handy during a gore raid — review it on your own terms from the start menu instead.",
+                    visible: () => isJannyRank(),
+                },
+                {
+    key: "disableBackgroundYouTube",
+    type: "checkbox",
+    label: "Disable Background YouTube",
+    description: "Don't autoplay YouTube videos other people put on in the background.",
+    onChange: (value) => { if (value) hideByoutube(); }
+},
+                {
+                    key: "disableDvdBounce",
+                    type: "checkbox",
+                    label: "Disable DVD Bounce",
+                    description: "Stop other people's /dvdbounce from bouncing your Bonzi around the screen.",
+                },
+                {
+                    key: "volume",
+                    type: "range",
+                    label: "Volume",
+                    min: 0,
+                    max: 100,
+                    description: "Master volume for sound effects and text-to-speech.",
+                    onChange: (value) => setVolume(value / 100),
+                },
+                {
+                    key: "ttsPitch",
+                    type: "range",
+                    label: "Speech Pitch",
+                    min: 15,
+                    max: 125,
+                    description: "Adjust the pitch of your Bonzi's text-to-speech voice. Saved locally.",
+                    onChange: () => syncVoicePreferences(),
+                },
+                {
+                    key: "ttsSpeed",
+                    type: "range",
+                    label: "Speech Speed",
+                    min: 125,
+                    max: 275,
+                    description: "Adjust the speed of your Bonzi's text-to-speech voice. Saved locally.",
+                    onChange: () => syncVoicePreferences(),
+                },
+                {
+                    key: "disableLocalVoiceSettings",
+                    type: "checkbox",
+                    label: "Disable Local for Speed and Pitch",
+                    description: "Stop local voice speed and pitch overrides from being applied to your Bonzi.",
+                    onChange: () => syncVoicePreferences(),
+                },
+                {
+                    type: "html",
+                    html: "Blacklist:"
+                },
+                {
+                    key: "wordBlacklist",
+                    type: "textarea",
+                    placeholder: "Newline-separated list of blacklisted words.",
+                    splitByLine: true,
+                    description: "Messages containing any of these words are hidden behind a 'Show' button. One word per line.",
+                    onChange: (value) => { wordBlacklist = value; },
+                },
+            ],
+        },
+        commandSafety: {
+            name: "Command Safety",
+            settings: [
+                {
+                    key: "disableXss",
+                    type: "checkbox",
+                    label: "Disable /xss",
+                    description: "Blocks /xss from this browser only. Other clients are unaffected.",
+                },
+                {
+                    key: "disableMassinject",
+                    type: "checkbox",
+                    label: "Disable /massinject",
+                    description: "Blocks /massinject from this browser only. Other clients are unaffected.",
+                },
+            ],
+        },
+        performance: {
+            name: "Performance",
+            settings: [
+                {
+                    type: "html",
+                    html: "Disable visual effects to improve performance on slower devices.",
+                },
+                {
+                    key: "disableServersideMovement",
+                    type: "checkbox",
+                    label: "Disable Serverside Movement",
+                    description: "Ignore position updates for other users' Bonzis (they stop sliding around when others drag them).",
+                },
+                {
+                    key: "disableShadows",
+                    type: "checkbox",
+                    label: "Disable Shadows",
+                    description: "Remove Bonzi and speech-bubble shadows.",
+                    onChange: (value) => document.body.classList.toggle("no_shadows", value),
+                },
+                {
+                    key: "disableBubbleFade",
+                    type: "checkbox",
+                    label: "Disable Bubble Fade-out",
+                    description: "Hide speech bubbles immediately instead of fading them out.",
+                    onChange: (value) => document.body.classList.toggle("no_bubble_fade", value),
+                },
+                {
+                    key: "disableLoginFade",
+                    type: "checkbox",
+                    label: "Disable Login Fade-out",
+                    description: "Hide the login screen immediately after joining.",
+                },
+            ],
+        },
+        autojoin: {
+            name: "Auto Join",
+            settings: [
+                
+                {
+                    type: "html",
+                    html: "Automatically set your look every time you join a room. Your rank decides what actually sticks — the server has the final say.",
+                },
+                {
+                    key: "autoApply",
+                    type: "checkbox",
+                    label: "Apply on join",
+                    description: "Master switch. When off, nothing below is applied.",
+                },
+                {
+                    key: "autoColor",
+                    type: "text",
+                    label: "Color / Skin",
+                    placeholder: "e.g. blue, glow, pope",
+                    getOptions: () => appearanceSuggestions(),
+                    description: () => appearanceHint(),
+                },
+                {
+                    key: "autoHats",
+                    type: "text",
+                    label: "Hats",
+                    placeholder: "space-separated, e.g. tophat dank",
+                    getOptions: () => hatSuggestions(),
+                    description: () => hatHint(),
+                },
+                {
+                    key: "autoCrosscolor",
+                    type: "text",
+                    label: "Crosscolor",
+                    placeholder: "Image URL, or: sheet https://...",
+                    description: "Optional. Applied after Color / Skin, so it overrides the normal color.",
+                },
+                {
+                    key: "autoCrosshats",
+                    type: "text",
+                    label: "Crosshats",
+                    placeholder: "Up to 10 image URLs separated by spaces",
+                    description: "Optional. Every valid URL is added as a separate crosshat.",
+                },
+                {
+                    key: "autoTag",
+                    type: "text",
+                    label: "Tag",
+                    placeholder: "Your custom tag",
+                    visible: () => isModRank(),
+                    description: "Mods and above only.",
+                },
+            ],
+        },
+        css: {
+            name: "Themes",
+            settings: [
+                {
+                    type: "html",
+                    html: `BonziWORLD has a few built-in themes. You can also enter your own custom CSS below.<br>
+                    <button onclick="themeify('')">Default</button>
+                    <button onclick="themeify('./windowsvista.css')">Vista</button>
+                    <button onclick="themeify('./themes/playstation2.css', 'ps2')">PlayStation 2</button>
+                    <button onclick="themeify('./themes/dreamcast.css', 'dreamcast')">Dreamcast + Music</button>
+                    <button onclick="themeify('./themes/gamecube.css')">GameCube</button>
+                    <button onclick="themeify('./themes/longhorn.css?v=2')">Longhorn Blue</button>`
+                },
+                {
+                    type: "html",
+                    html: `<hr><b>Custom Background</b><br>
+                    Images are stored only in this browser (maximum 20 MB).<br>
+                    <button onclick="chooseCustomBackground('room')">Upload In-Room Background</button>
+                    <button onclick="clearCustomBackground('room')">Clear In-Room</button><br>
+                    <button onclick="chooseCustomBackground('login')">Upload Login Background</button>
+                    <button onclick="clearCustomBackground('login')">Clear Login</button>
+                    <div id="custom_background_status" aria-live="polite"></div>`
+                },
+                {
+                    type: "html",
+                    html: "Recolor the desktop wallpaper. These only tint the background — your Bonzi and windows stay normal."
+                },
+                {
+                    key: "bgHue",
+                    type: "range",
+                    label: "Background Hue",
+                    min: 0,
+                    max: 360,
+                    description: "Rotate the wallpaper's colors (0–360°).",
+                    onChange: () => applyBgTheme(),
+                },
+                {
+                    key: "bgSaturate",
+                    type: "range",
+                    label: "Background Saturation",
+                    min: 0,
+                    max: 200,
+                    description: "0% = grayscale, 100% = normal, 200% = vivid.",
+                    onChange: () => applyBgTheme(),
+                },
+                {
+                    key: "bgBrightness",
+                    type: "range",
+                    label: "Background Brightness",
+                    min: 0,
+                    max: 200,
+                    description: "0% = black, 100% = normal, 200% = extra bright.",
+                    onChange: () => applyBgTheme(),
+                },
+                {
+                    type: "html",
+                    html: "<hr>Advanced: enter custom <a href=\"https://developer.mozilla.org/en-US/docs/Web/CSS\" target=\"_blank\">CSS</a> below. Don't touch this if you \
+                           don't know what you're doing, this can brick BonziWORLD."
+                },
+                {
+                    key: "customCSS",
+                    type: "textarea",
+                    placeholder: "Enter custom CSS",
+                    description: "Inject your own CSS to restyle anything. Leave blank for the default look.",
+                    onChange: (value) => applyCustomCSS(value),
+                },
+                /*{
+                    type: "html",
+                    html: "<a href=\"https://bonzi.gay/extra/css_tutorial.html\">CSS tutorial</a>"
+                },*/
+            ],
+        },
+    },
+    init(storage = localStorage) {
+        for (let [key, setting] of entries(settings.schema)) {
+            if (storage[key] == null) {
+                storage[key] = setting.default;
+            }
+        }
+    },
+    load(storage = localStorage) {
+        for (let [key, setting] of entries(settings.schema)) {
+            try {
+                setting.onLoad?.(settings.get(key, storage));
+            } catch (err) {
+                console.error(`Loading setting ${key} failed:`, err);
+                localStorage[key] = setting.default;
+                setting.onLoad?.(setting.default);
+            }
+        }
+    },
+    export(storage = localStorage) {
+        let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<settings>\n`;
+        for (let [key, setting] of entries(settings.schema)) {
+            if (!setting.xml) continue;
+            if (setting.type === "boolean") {
+                xml += `    <${setting.xml.tag} ${setting.xml.attr}="${storage[key] === "true"}"/>\n`;
+            } else if (setting.type === "number") {
+                xml += `    <${setting.xml.tag} ${setting.xml.attr}="${sanitize(storage[key])}"/>\n`;
+            } else if (setting.type === "array") {
+                let items = JSON.parse(storage[key] || "[]");
+                if (items.length > 0) {
+                    xml += `    <${setting.xml.tag}>\n`;
+                    for (let item of items) {
+                            xml += `        <${setting.xml.items}>${sanitize(item)}</${setting.xml.items}>\n`;
+                    }
+                    xml += `    </${setting.xml.tag}>\n`;
+                }
+            } else if (setting.type === "string") {
+                xml += `    <${setting.xml.tag}><![CDATA[${storage[key].replace(/]]>/g, "]]]]><![CDATA[>")}]]></${setting.xml.tag}>\n`;
+            } else {
+                xml += `    <${setting.xml.tag}>${sanitize(storage[key])}</${setting.xml.tag}>\n`;
+            }
+        }
+        xml += "</settings>";
+        return xml;
+    },
+    import(xml, storage = localStorage) {
+        let parser = new DOMParser();
+        let settingsXML = parser.parseFromString(xml, "application/xml");
+        let settings = settingsXML.documentElement;
+        if (settingsXML.querySelector("parsererror")) {
+            throw Error(`Parser error: ${settingsXML.querySelector("parsererror").textContent}`);
+        } else if (settings.tagName !== "settings") {
+            throw Error(`Root tag is <${settings.tagName}>, not <settings>`);
+        }
+        for (let [key, setting] of entries(settings.schema)) {
+            if (!setting.xml) continue;
+            if (!xpath(settingsXML, `./${setting.xml.tag}`)) {
+                throw Error(`Missing <${setting.xml.tag}>`);
+            }
+            if (setting.type === "boolean") {
+                storage[key] = xpath(settingsXML, `string(./${setting.xml.tag}/@${setting.xml.attr})`) === "true";
+                setting.onChange?.(storage[key] === "true");
+            } else if (setting.type === "number") {
+                storage[key] = xpath(settingsXML, `string(./${setting.xml.tag}/@${setting.xml.attr})`);
+                setting.onChange?.(storage[key]);
+            } else if (setting.type === "array") {
+                let items = [];
+                for (let node of xpath(settingsXML, `./${setting.xml.tag}/${setting.xml.items}`)) {
+                    items.push(node.textContent);
+                }
+                storage[key] = JSON.stringify(items);
+                setting.onChange?.(items);
+            } else if (setting.type === "string") {
+                storage[key] = xpath(settingsXML, `string(./${setting.xml.tag})`);
+                setting.onChange?.(storage[key]);
+            }
+        }
+    },
+    get(key, storage = localStorage) {
+        let setting = settings.schema[key];
+        if (setting.type === "boolean") {
+            return storage[key] === "true";
+        } else if (setting.type === "number") {
+            return +storage[key];
+        } else if (setting.type === "array") {
+            return JSON.parse(storage[key]);
+        } else if (setting.type === "string") {
+            return storage[key];
+        }
+    },
+    set(key, value, storage = localStorage) {
+        let setting = settings.schema[key];
+        if (setting.type === "boolean") {
+            storage[key] = value ? "true" : "false";
+        } else if (setting.type === "number") {
+            storage[key] = value;
+        } else if (setting.type === "array") {
+            storage[key] = JSON.stringify(value);
+        } else if (setting.type === "string") {
+            storage[key] = value;
+        }
+    },
+    render(el) {
+        el.innerHTML = `
+            <div class="hbox fill">
+                <div class="settings_sidebar"></div>
+                <div class="vbox fill" style="gap: 4px; padding: 4px;">
+                    <div class="settings_content"></div>
+                    <div class="button_row">
+                        <button class="import">Import</button>
+                        <button class="export">Export</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        let sidebar = document.querySelector(".settings_sidebar");
+        let content = document.querySelector(".settings_content");
+        for (let [categoryId, category] of entries(settings.layout)) {
+            let cat = document.createElement("div");
+            cat.classList.add("settings_category");
+            cat.textContent = category.name;
+            sidebar.appendChild(cat);
+            if (categoryId === "general") cat.classList.add("selected");
+            cat.addEventListener("click", () => {
+                sidebar.querySelector(".selected").classList.remove("selected");
+                cat.classList.add("selected");
+                settings.renderCategory(content, categoryId);
+            });
+        }
+        let exportButton = document.querySelector(".export");
+        exportButton.addEventListener("click", () => {
+            exportWindow();
+        });
+        let importButton = document.querySelector(".import");
+        importButton.addEventListener("click", () => {
+            importWindow();
+        });
+        settings.renderCategory(content, "general");
+    },
+    renderCategory(el, category) {
+        el.innerHTML = "";
+        let layout = settings.layout[category].settings;
+        for (let i = 0; i < layout.length; i++) {
+            let setting = layout[i];
+            if (setting.visible && !setting.visible()) continue;
+            let key = setting.key;
+            switch (setting.type) {
+                case "checkbox": {
+                    let label = document.createElement("label");
+                    let input = document.createElement("input");
+                    label.appendChild(input);
+                    input.type = "checkbox";
+                    input.dataset.setting = key;
+                    input.checked = settings.get(key);
+                    input.onchange = () => { 
+                        settings.set(key, input.checked)
+                        setting.onChange?.(input.checked);
+                    };
+                    label.appendChild(document.createTextNode(` ${setting.label}`));
+                    el.appendChild(label);
+                } break;
+                case "range": {
+                    let label = document.createElement("label");
+                    label.appendChild(document.createTextNode(`${setting.label}: `));
+                    let input = document.createElement("input");
+                    input.style.verticalAlign = "middle"; 
+                    label.appendChild(input);
+                    input.type = "range";
+                    input.min = setting.min;
+                    input.max = setting.max;
+                    input.value = settings.get(key);
+                    input.onchange = () => { 
+                        settings.set(key, input.value);
+                        setting.onChange?.(input.value);
+                    };
+                    el.appendChild(label);
+                } break;
+                case "textarea": {
+                    let textarea = document.createElement("textarea");
+                    textarea.className = "settings_textarea";
+                    textarea.placeholder = setting.placeholder;
+                    if (setting.splitByLine) {
+                        textarea.value = settings.get(key).join("\n");
+                        textarea.onchange = () => { 
+                            let lines = textarea.value.split("\n").map(w => w.trim()).filter(w => w.length > 0);
+                            settings.set(key, lines);
+                            setting.onChange?.(lines);
+                        };
+                    } else {
+                        textarea.value = settings.get(key);
+                        textarea.oninput = () => { 
+                            
+                            settings.set(key, textarea.value);
+                            setting.onChange?.(textarea.value);
+                        };
+                    }
+                    el.appendChild(textarea);
+                } break;
+                case "text": {
+                    let label = document.createElement("label");
+                    label.appendChild(document.createTextNode(`${setting.label}: `));
+                    let input = document.createElement("input");
+                    input.type = "text";
+                    input.value = settings.get(key);
+                    if (setting.placeholder) input.placeholder = setting.placeholder;
+                    if (setting.getOptions) {
+                        let datalist = document.createElement("datalist");
+                        datalist.id = `dl_${key}`;
+                        for (let opt of setting.getOptions()) {
+                            let option = document.createElement("option");
+                            option.value = opt;
+                            datalist.appendChild(option);
+                        }
+                        input.setAttribute("list", datalist.id);
+                        label.appendChild(datalist);
+                    }
+                    input.onchange = () => {
+                        settings.set(key, input.value);
+                        setting.onChange?.(input.value);
+                    };
+                    label.appendChild(input);
+                    el.appendChild(label);
+                } break;
+                case "html": {
+                    let div = document.createElement("div");
+                    div.innerHTML = setting.html;
+                    el.appendChild(div);
+                }
+            }
+            if (setting.description) {
+                let small = document.createElement("small");
+                small.textContent = typeof setting.description === "function" ? setting.description() : setting.description;
+                el.appendChild(small);
+            }
+        }
+    }
+};
+
+// --- Auto Join appearance -------------------------------------------------
+// These suggestion lists mirror server/settings.json (bonziColors / hats /
+// blessedHats). They only feed the autocomplete hints in the Auto Join panel;
+// the server enforces what each rank may actually use, so drift here is harmless.
+const AUTO_NORMAL_COLORS = ["purple", "blue", "magenta", "green", "lime", "red", "black", "brown", "maroon", "peedy", "yellow", "cyan", "teal", "turquoise", "indigo", "violet", "pink", "gray", "orange", "white", "brainrotted", "abyss", "jungle"];
+const AUTO_BLESSED_SKINS = ["angel", "glow", "noob", "gold", "applecat"];
+const AUTO_POPE_SKINS = ["pope", "radical", "rad", "darllo", "izhan", "jimmy", "greenmsn", "greenpope", "bonzidev"];
+const AUTO_CONTRIBUTOR_SKINS = ["radicalpink"];
+const AUTO_DEVELOPER_SKINS = ["redpope", "bluepope", "pinkpope", "nothingleft"];
+const AUTO_RADICAL_SKINS = ["greenjimmy"];
+const AUTO_BIG_OWNER_SKINS = ["bluejimmy"];
+const AUTO_NORMAL_HATS = ["tophat", "bluebowtie", "bieber", "troll", "kamala", "banana", "elon", "bucket", "scarf", "obama", "bfdi", "maga", "evil", "emoji", "wizard", "cat", "witch", "qmark", "horse", "bowtie", "pot", "chef", "ushanka", "party", "epic", "bush", "clown", "sunglasses", "chain", "greenbowtie", "yellowbowtie", "purplebowtie", "ant", "astronaut", "bwi", "cape", "gun", "ninja", "soldier", "hacker", "police"];
+  const AUTO_BLESSED_HATS = ["dank", "cigar", "illuminati", "bear", "truck", "propeller", "nopupil", "dance", "pumpkin", "cauldron", "frankenstein", "hockey", "don", "decorated", "santa", "elf", "rudolph", "goldhat", "diamondhat", "rainbowhat", "emeraldhat", "rubyhat", "amethysthat", "abysshat", "redglow", "cloned"];
+// Public skins use dedicated commands rather than /color.
+const AUTO_PUBLIC_SKINS = ["freepope", "radicalblue"];
+// Mod-tier (runlevel >= 2) hats hardcoded in the server /hat command.
+const AUTO_MOD_HATS = ["king", "headphones2", "headphones3", "scarf2", "redcrown", "diamondchain", "reddiamondchain", "silverchain", "bluepupils", "greenpupils", "greendiamondchain", "yellowdiamondchain", "purplediamondchain", "scarf3", "scarf4", "scarf5", "yellowpupils", "purplepupils", "bluecrown", "greencrown", "yellowcrown", "purplecrown", "headphones4", "headphones5", "gamer", "premium", "opalchain", "cape2", "cape3", "cape4", "cape5", "cape6"];
+const AUTO_POPE_HATS = ["king2", "hiimstickman", "palestine", "rainbowchain"];
+
+// "Mod and above" can set tags (server /tag is runlevel 1.5: kings/admins/popes).
+function isModRank() { return admin || king || pope || owner || radical || bigowner; }
+// Janny (runlevel 1.05) and above — janitors, kings, admins, popes.
+function isJannyRank() { return janitor || king || admin || pope || owner || radical || bigowner; }
+// Blessed-tier perks (blessed skins/hats, multihat) are runlevel >= 1.
+function isBlessedRank() { return blessed || janitor || king || admin || pope || owner || radical || bigowner; }
+// Mods (runlevel >= 2: king/admin/pope) get the 10-hat limit server-side.
+function autoHatLimit() { return isModRank() ? 10 : isBlessedRank() ? 3 : 1; }
+
+function appearanceSuggestions() {
+    let out = [...AUTO_NORMAL_COLORS, ...AUTO_PUBLIC_SKINS];
+    if (isBlessedRank()) out.push(...AUTO_BLESSED_SKINS);
+    if (pope) out.push(...AUTO_POPE_SKINS);
+    if (contributor || developer || owner || radical || bigowner) out.push(...AUTO_CONTRIBUTOR_SKINS);
+    if (developer || owner || radical || bigowner) out.push(...AUTO_DEVELOPER_SKINS);
+    if (radical || bigowner) out.push(...AUTO_RADICAL_SKINS);
+    if (bigowner) out.push(...AUTO_BIG_OWNER_SKINS);
+    return [...new Set(out)];
+}
+
+function hatSuggestions() {
+    let out = [...AUTO_NORMAL_HATS];
+    if (isBlessedRank()) out.push(...AUTO_BLESSED_HATS);
+    if (isModRank()) out.push(...AUTO_MOD_HATS);
+    if (pope || owner || radical || bigowner) out.push(...AUTO_POPE_HATS);
+    out.push(...unlocks); // vault hats this user has unlocked
+    return [...new Set(out)];
+}
+
+function appearanceHint() {
+    let parts = ["Pick a color", "freepope (dunce cap + Fake Pope tag)", "radicalblue"];
+    if (isBlessedRank()) parts.push("blessed skin (angel/glow/noob/gold/applecat)");
+    if (contributor || developer || owner || radical || bigowner) parts.push("radicalpink");
+    if (pope) parts.push("pope skin");
+    if (developer || owner || radical || bigowner) parts.push("Developer skins (redpope/bluepope/pinkpope/nothingleft)");
+    return parts.join(" or ") + ".";
+}
+
+function hatHint() {
+    let limit = autoHatLimit();
+    let extra = isModRank() ? " Blessed/mod/vault hats allowed." : isBlessedRank() ? " Blessed/vault hats allowed." : "";
+    return `Up to ${limit} hat${limit === 3 ? "" : "s"}, separated by spaces.${extra}`;
+}
+
+// Build the Auto Join payload sent with the login event. The server applies
+// these presets (color/skin, hats, tag) BEFORE the join animation plays — gated
+// by your rank — so you appear with your chosen look instantly, instead of the
+// client re-issuing /color, /hat, /tag a second after joining. Returns undefined
+// when Auto Join is off or empty (so no `auto` key is sent at all).
+function autoJoinPresets() {
+    if (!settings.get("autoApply")) return undefined;
+    let color = (settings.get("autoColor") || "").trim();
+    let hats = (settings.get("autoHats") || "").trim();
+    let crosscolor = (settings.get("autoCrosscolor") || "").trim();
+    let crosshats = (settings.get("autoCrosshats") || "").trim();
+    let tag = (settings.get("autoTag") || "").trim();
+    if (!color && !hats && !crosscolor && !crosshats && !tag) return undefined;
+    return { color, hats, crosscolor, crosshats, tag };
+}
+
+function applyCustomCSS(css) {
+    customStyle.textContent = css;
+}
+
+function renderThemeEffects() {
+    const active = theme => theme === "vaporwave" && forcedVaporwave !== null
+        ? forcedVaporwave
+        : localThemes.has(theme) || serverThemeState.has(theme);
+    document.body.classList.toggle("vaporwave", active("vaporwave"));
+    if (active("frutiger")) startFrutiger();
+    else stopFrutiger();
+    acidThemeStyle.textContent = active("acid")
+        ? `@keyframes sex{from{filter:hue-rotate(0deg)}to{filter:hue-rotate(360deg)}}` +
+          `#content::before, canvas, img, picture, video, body, .window, .bonzi, .desktop { animation: sex 5s linear infinite; }` +
+          `#content::before { filter: hue-rotate(0deg); }`
+        : "";
+    terminalThemeStyle.textContent = active("terminal")
+        ? `.bubble,.bonzi_name,.bubble::after{background:0!important;border:0}` +
+          `*{color:green!important;font-family:monospace!important}` +
+          `#content{background:#000}` +
+          `.bubble-content::before{content:">"}` +
+          `.bonzi_name{padding:0;position:static}` +
+          `.bubble{overflow:visible}` +
+          `.bubble-left{right:0px}` +
+          `input[type=text]{background-color:#000;border:0}` +
+          `#chat_send,#chat_tray{display:none}` +
+          `#chat_bar{background:0}`
+        : "";
+}
+
+function setLocalTheme(theme, enabled) {
+    if (!supportedThemes.has(theme)) return;
+    if (theme === "vaporwave") forcedVaporwave = null;
+    if (enabled) localThemes.add(theme);
+    else localThemes.delete(theme);
+    renderThemeEffects();
+}
+
+function setServerThemes(themes) {
+    serverThemeState = new Set(
+        Array.isArray(themes) ? themes.filter(theme => supportedThemes.has(theme)) : [],
+    );
+    renderThemeEffects();
+}
+
+function syncVoicePreferences() {
+    let pitch = clamp(Number(settings.get("ttsPitch")), 15, 125);
+    let speed = clamp(Number(settings.get("ttsSpeed")), 125, 275);
+    if (!Number.isFinite(pitch)) pitch = 50;
+    if (!Number.isFinite(speed)) speed = 175;
+    settings.set("ttsPitch", pitch);
+    settings.set("ttsSpeed", speed);
+
+    let disableLocal = settings.get("disableLocalVoiceSettings");
+    let localBonzi = bonzis.get(me);
+    let currentPitch = localBonzi?.userPublic?.pitch;
+    let currentSpeed = localBonzi?.userPublic?.speed;
+    let effectivePitch = Number.isFinite(Number(currentPitch)) ? Number(currentPitch) : pitch;
+    let effectiveSpeed = Number.isFinite(Number(currentSpeed)) ? Number(currentSpeed) : speed;
+
+    if (disableLocal) {
+        effectivePitch = clamp(effectivePitch, 15, 125);
+        effectiveSpeed = clamp(effectiveSpeed, 125, 275);
+    } else {
+        effectivePitch = pitch;
+        effectiveSpeed = speed;
+    }
+
+    if (localBonzi) {
+        localBonzi.userPublic.pitch = effectivePitch;
+        localBonzi.userPublic.speed = effectiveSpeed;
+    }
+
+    if (socket?.connected) {
+        socket.emit("voiceSettings", { pitch: effectivePitch, speed: effectiveSpeed });
+    }
+}
+
+// Recolor only the desktop wallpaper (not Bonzis/windows). We paint a copy of
+// #content's background onto its ::before pseudo-element and filter just that
+// layer; `background: inherit` makes it track whichever wallpaper is active
+// (default / vaporwave / classic). Cleared (no-op) at the default values.
+function applyBgTheme() {
+    let hue = Number(settings.get("bgHue"));
+    let sat = Number(settings.get("bgSaturate"));
+    let bri = Number(settings.get("bgBrightness"));
+    if (!Number.isFinite(hue)) hue = 0;
+    if (!Number.isFinite(sat)) sat = 100;
+    if (!Number.isFinite(bri)) bri = 100;
+    if (hue === 0 && sat === 100 && bri === 100) {
+        bgThemeStyle.textContent = "";
+        return;
+    }
+    bgThemeStyle.textContent =
+        `#content::before{content:"";position:fixed;inset:0;z-index:-1;` +
+        `pointer-events:none;background:inherit;` +
+        `filter:hue-rotate(${hue}deg) saturate(${sat}%) brightness(${bri}%);}`;
+}
+
+settings.init();
+settings.load();
+loadCustomBackgrounds();
+
+function xpath(el, expr) {
+    let result = el.getRootNode().evaluate(expr, el);
+    switch (result.resultType) {
+        case XPathResult.BOOLEAN_TYPE:
+            return result.booleanValue;
+        case XPathResult.NUMBER_TYPE:
+            return result.numberValue;
+        case XPathResult.STRING_TYPE:
+            return result.stringValue;
+        case XPathResult.UNORDERED_NODE_ITERATOR_TYPE:
+            let list = [];
+            let node;
+            while (node = result.iterateNext()) {
+                list.push(node);
+            }
+            return list;
+    }
+}
+
+function openSettings() {
+    if (settingsDialog) {
+        settingsDialog.element.remove();
+    }
+    settingsDialog = new Dialog({
+        title: "Settings",
+        class: "settings",
+        width: 650,
+        height: 420,
+        x: 20,
+        y: 20
+    });
+    settings.render(settingsDialog.bodyElement);
+}
+
+function exportWindow() {
+    let dialog = new Dialog({
+        title: "Export Settings",
+        class: "export_window",
+        html: `
+            <textarea class="export fill" readonly></textarea>
+        `,
+        width: 400,
+        height: 300,
+        x: 100,
+        y: 100
+    });
+    let element = dialog.element;
+    let exportText = element.querySelector(".export");
+    exportText.value = settings.export();
+    exportText.focus();
+}
+
+function importWindow() {
+    let dialog = new Dialog({
+        title: "Import Settings",
+        class: "import_window",
+        html: `
+            <textarea class="import fill" placeholder="Paste your settings here."></textarea>
+            <div class="button_row">
+                <button class="import_button">Import</button>
+            </div>
+        `,
+        width: 400,
+        height: 300,
+        x: 100,
+        y: 100
+    });
+    let element = dialog.element;
+    let importText = element.querySelector(".import");
+    importText.focus();
+    element.querySelector(".window_close").onclick = () => {
+        dialog.element.remove();
+    }
+    element.querySelector(".import_button").onclick = () => {
+        let text = importText.value;
+        try {
+            let lastX = settingsDialog.x;
+            let lastY = settingsDialog.y;
+            settings.import(text);
+            openSettings();
+            settingsDialog.move(lastX, lastY);
+        } catch (err) {
+            Dialog.alert({ 
+                html: markup(err.message)
+            });
+        }
+    }
+}
+
+async function dolphin() {
+    if (!gravity) {
+        let script = document.createElement("script");
+        script.async = true;
+        script.src = "./lib/jGravity.js";
+        gravity = true;
+        script.onload = () => {
+            $("#content").jGravity({
+                target: ".bonzi",
+                depth: Infinity,
+            });
+        }
+        document.head.appendChild(script);
+    }
+}
+
+async function water() {
+    if (!isWaterLoaded) {
+        let script = document.createElement("script");
+        script.async = true;
+        script.src = "./lib/waterFloat-min.js";
+        isWaterLoaded = true;
+        script.onload = () => {
+            new waterFloat($(".bonzi"), 900, 3, 8);
+        }
+        document.head.appendChild(script);
+    }
+}
+
+
+const SELECTABLE_COMMAND_PAYLOAD_PREFIX = "__BW_SELECT_V1__";
+const SELECTABLE_COMMAND_TEXT_LIMIT = 3000;
+const selectableJsonCache = new Map();
+
+function isSelectableCommand(command) {
+    return ["selectjoke", "selectfact", "selectjoke2", "selectfact2"].includes(String(command || "").toLowerCase());
+}
+
+function selectableEventChoices(groups) {
+    if (!Array.isArray(groups)) return [];
+    return groups.map((group) => {
+        const events = Array.isArray(group) ? group : [group];
+        const factId = events.find(
+            (event) => typeof event?.factId === "string",
+        )?.factId;
+        const parts = events
+            .filter((event) => event?.type === "text" && typeof event.text === "string")
+            .map((event) => ({
+                text: event.text,
+                ...(typeof event.say === "string" ? { say: event.say } : {}),
+            }));
+        return parts.length
+            ? {
+                label: parts.map((part) => part.text).join(" / "),
+                parts,
+                ...(factId ? { factId } : {}),
+            }
+            : null;
+    }).filter(Boolean);
+}
+
+async function loadSelectableJson(file) {
+    if (!selectableJsonCache.has(file)) {
+        const scriptUrl = document.querySelector('script[src*="script.js"]')?.src || document.baseURI;
+        const request = fetch(new URL(file, scriptUrl))
+            .then(async (response) => {
+                if (!response.ok) throw new Error(`Could not load ${file} (${response.status})`);
+                const data = await response.json();
+                if (!Array.isArray(data)) throw new Error(`${file} must contain a list`);
+                return data;
+            });
+        selectableJsonCache.set(file, request);
+    }
+    try {
+        return await selectableJsonCache.get(file);
+    } catch (error) {
+        selectableJsonCache.delete(file);
+        throw error;
+    }
+}
+
+async function selectableChoices(command) {
+    if (command === "selectjoke") {
+        return selectableEventChoices(BonziData.event_list_joke_mid);
+    }
+    if (command === "selectfact") {
+        return selectableEventChoices(BonziData.event_list_fact_mid);
+    }
+    if (command === "selectjoke2") {
+        const jokes = await loadSelectableJson("joke2.json");
+        if (!jokes.length || jokes.length % 2 !== 0) {
+            throw new Error("The joke list must contain complete two-part jokes.");
+        }
+        const choices = [];
+        for (let index = 0; index < jokes.length; index += 2) {
+            const parts = [{ text: jokes[index] }, { text: jokes[index + 1] }];
+            choices.push({ label: `${parts[0].text} / ${parts[1].text}`, parts });
+        }
+        return choices;
+    }
+    if (command === "selectfact2") {
+        const facts = await loadSelectableJson("fact2.json");
+        return facts
+            .map((fact) => {
+                return typeof fact === "string"
+                    ? {
+                        label: fact,
+                        parts: [{ text: fact }],
+                    }
+                    : null;
+            })
+            .filter(Boolean);
+    }
+    return [];
+}
+
+async function openSelectableDialog(command) {
+    const isJoke = command.includes("joke");
+    const kind = isJoke ? "joke" : "fact";
+    let choices = [];
+    let listError = "";
+    try {
+        choices = await selectableChoices(command);
+        if (!choices.length) listError = "No existing entries are available for this command.";
+    } catch (error) {
+        console.error(`Unable to load the ${kind} selection list:`, error);
+        listError = "The existing list could not be loaded. You can still enter your own text.";
+    }
+
+    const optionsHtml = choices.map((choice, index) =>
+        `<option value="${index}">${sanitize(choice.label)}</option>`
+    ).join("");
+    const dialog = new Dialog({
+        title: `Select a ${kind[0].toUpperCase()}${kind.slice(1)}`,
+        class: "flex_window",
+        width: 560,
+        center: true,
+        html: `
+            <div class="blessed_body" style="font-family: Tahoma, sans-serif; font-size: 12px; padding: 12px; color: #000; box-sizing: border-box;">
+                <p style="margin: 0 0 10px;">Choose an existing entry or enter your own text. You can also use <b>/${command} your text</b> directly.</p>
+                ${listError ? `<div class="select-command-list-error" role="status" style="color: #8b0000; margin-bottom: 8px;">${sanitize(listError)}</div>` : ""}
+                <label style="display: block;">Existing entries
+                    <select class="select-command-existing" size="5" style="display: block; width: 100%; margin-top: 5px;" ${choices.length ? "" : "disabled"}>
+                        ${optionsHtml}
+                    </select>
+                </label>
+                <button type="button" class="select-command-use-existing" style="margin: 8px 0 12px;" ${choices.length ? "" : "disabled"}>Use selected entry</button>
+                <hr style="border: 0; border-top: 1px solid #aaa; margin: 4px 0 10px;">
+                <label style="display: block;">Your own ${kind}
+                    <textarea class="select-command-custom" maxlength="${SELECTABLE_COMMAND_TEXT_LIMIT}" rows="4" style="display: block; width: 100%; box-sizing: border-box; margin-top: 5px;" placeholder="Type your own ${kind} here..."></textarea>
+                </label>
+                <button type="button" class="select-command-use-custom" style="margin-top: 8px;">Use my text</button>
+                <div class="select-command-error" role="alert" aria-live="polite" style="color: #8b0000; min-height: 16px; margin-top: 6px;"></div>
+            </div>
+        `,
+    });
+
+    const errorElement = dialog.bodyElement.querySelector(".select-command-error");
+    const selectionPayload = (payload) =>
+        `${SELECTABLE_COMMAND_PAYLOAD_PREFIX}${JSON.stringify(payload)}`;
+    const sendParts = (parts) => {
+        const totalChars = parts.reduce((sum, part) => sum + part.text.length + (part.say?.length || 0), 0);
+        if (!parts.length || totalChars > SELECTABLE_COMMAND_TEXT_LIMIT) {
+            errorElement.textContent = `Enter text under ${SELECTABLE_COMMAND_TEXT_LIMIT} characters.`;
+            return;
+        }
+        cmd(`${command} ${selectionPayload({ parts })}`);
+        dialog.element.remove();
+    };
+
+    dialog.bodyElement.querySelector(".select-command-use-existing").addEventListener("click", () => {
+        const index = Number(dialog.bodyElement.querySelector(".select-command-existing").value);
+        const choice = choices[index];
+        if (!choice) {
+            errorElement.textContent = "Choose an existing entry first.";
+            return;
+        }
+        if (typeof choice.factId === "string") {
+            cmd(`${command} ${selectionPayload({ factId: choice.factId })}`);
+            dialog.element.remove();
+            return;
+        }
+        sendParts(choice.parts);
+    });
+    dialog.bodyElement.querySelector(".select-command-use-custom").addEventListener("click", () => {
+        const text = dialog.bodyElement.querySelector(".select-command-custom").value.trim();
+        if (!text) {
+            errorElement.textContent = `Enter your own ${kind}, or choose an existing entry.`;
+            return;
+        }
+        sendParts([{ text }]);
+    });
+}
+
+function cmd(str) {
+	let commandText = String(str || "").trim();
+	let firstSpace = commandText.indexOf(" ");
+	let command = firstSpace === -1 ? commandText : commandText.slice(0, firstSpace);
+	let args = firstSpace === -1 ? "" : commandText.slice(firstSpace + 1);
+    const normalizedCommand = command.replace(/^\/+/, "").toLowerCase();
+    const localSettingKey = normalizedCommand === "xss"
+        ? "disableXss"
+        : normalizedCommand === "massinject"
+            ? "disableMassinject"
+            : null;
+    if (localSettingKey && settings.get(localSettingKey)) {
+        Dialog.alert(`/${normalizedCommand} is disabled in your local settings.`);
+        return;
+    }
+    if (isSelectableCommand(command) && !args.trim()) {
+        openSelectableDialog(command.toLowerCase());
+        return;
+    }
+    socket.emit("command", {
+		command,
+		args,
+	});
+}
+
+function bonziVerPopup() {
+    const username = (this.userPublic && this.userPublic.name) ? this.userPublic.name : "User";
+
+    return new Dialog({
+        title: "About BonziWORLD",
+        class: "flex_window",
+        html: `
+            <div class="blessed_body" style="font-family: 'Tahoma', sans-serif; font-size: 11px; padding: 12px; color: #000; box-sizing: border-box;">
+                <div style="text-align: center; margin-bottom: 12px;">
+                    <img src="img/misc/bonziver.png" alt="BonziWORLD" style="max-width: 100%; height: auto;" />
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <b>BonziWORLD</b><br>
+                    Version 6.1 (Build 7601: Service Pack 1)<br>
+                    Copyright &copy; Malwaresoft Corporation. All rights reserved.
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    This product is licensed under the terms of the<br>
+                    <a href="#" style="color: #0066cc;">End-User License Agreement</a> to:
+                    <div style="margin-left: 20px; margin-top: 5px;">
+                        <b>${username}</b><br>
+                        Malwaresoft
+                    </div>
+                </div>
+
+                <hr style="border: none; border-top: 1px solid #d0d0d0; margin: 10px 0 15px 0;">
+
+                <div style="margin-bottom: 15px;">
+                    <b>Physical memory available to BonziWORLD:</b> Unlimited
+                </div>
+
+                <div style="text-align: right;">
+                    <button class="xp-button" onclick="this.closest('.flex_window').remove()" style="
+                        font-family: 'Tahoma', sans-serif;
+                        font-size: 11px;
+                        min-width: 75px;
+                        padding: 3px 12px;
+                        cursor: pointer;">
+                        OK
+                    </button>
+                </div>
+            </div>
+        `,
+        x: 300,
+        y: 400,
+        width: 412,
+        height: 343,
+    });
+}
+
+function blessedPopup() {
+    return new Dialog({
+        title: "Blessmode",
+        class: "flex_window",
+        html: `
+            <div class="blessed_body">
+                <h1><marquee>YOU'VE BEEN BLESSED!</marquee></h1>
+                Blessed is a VIP-like status given to users who I like.<br>
+                You now have access to:<br>
+                <ul>
+                    <li> <b>Mutlihatting</b>: Use the /hat command with up to 3 hats. Try <var>/hat dank tophat</var>.
+                    <li> <b>Skins:</b> 4 custom skins
+                    <li> <b>Hats:</b> 4 extra hats
+                </ul>
+                <h3>Skins</h3>
+                <div class="roulette">
+                    <div class="card angel" onclick="cmd('angel')"></div>
+                    <div class="card glow" onclick="cmd('glow')"></div>
+                    <div class="card noob" onclick="cmd('noob')"></div>
+                    <div class="card gold" onclick="cmd('gold')"></div>
+                </div>
+                <h3>Hats</h3>
+                <div class="roulette">
+                    <div class="cardhat dank" onclick="cmd('hat dank')"></div>
+                    <div class="cardhat illuminati" onclick="cmd('hat illuminati')"></div>
+                    <div class="cardhat cigar" onclick="cmd('hat cigar')"></div>
+                    <div class="cardhat propeller" onclick="cmd('hat propeller')"></div>
+                </div>
+            </div>
+        `,
+        x: 300,
+        y: 400,
+        width: 600,
+        height: 400,
+    });
+}
+function helpPopup() {
+    const width = 852;
+    const height = 480;
+
+    // Calculate center coordinates
+    const x = Math.max(0, (window.innerWidth - width) / 2);
+    const y = Math.max(0, (window.innerHeight - height) / 2);
+
+    return new Dialog({
+        title: "README",
+        class: "flex_window",
+        html: `
+            <div class="blessed_body">
+                <iframe src="./readme.html" width="100%" height="100%"></iframe>
+            </div>
+        `,
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+    });
+}
+function cinemaPopup() {
+    return new Dialog({
+        title: "CINEMA",
+        class: "flex_window",
+        html: `
+            <div class="blessed_body">
+                <h1><marquee>WELCOME TO THE CINEMA!</marquee></h1>
+                <p>Watch sum videos here.</p>
+            </div>
+        `,
+        x: 300,
+        y: 400,
+        width: 600,
+        height: 400,
+    });
+}
+
+function janitorPopup() {
+    return new Dialog({
+        title: "You're a Janitor!",
+        class: "flex_window",
+        html: `
+            <div class="blessed_body">
+                <h1><marquee>YOU'VE BEEN JANNIFIED!</marquee></h1>
+                You've been appointed as a <b>Janitor</b> on BonziWORLD by the Pope.<br><br>
+                <b>What janitors do:</b><br>
+                <ul>
+                    <li>Review images and videos sent by users before they appear in chat.</li>
+                    <li>Approve clean content, deny rule-breaking content, or permanently blacklist URLs.</li>
+                    <li>The <b>Media Queue</b> window opens automatically when new media arrives.</li>
+                    <li>You can reopen it anytime from the Start Menu.</li>
+                </ul>
+                <b>How to be a good janitor:</b><br>
+                <ul>
+                    <li>Approve things quickly — users are waiting.</li>
+                    <li>When denying, leave a clear reason.</li>
+                    <li>Use <b>Ban URL</b> for anything that should never appear again (NSFW, illegal content, spam).</li>
+                    <li>When in doubt, deny and ask the Pope.</li>
+                    <li>Don't abuse it. You can be dejannified.</li>
+                </ul>
+                <hr>
+                <b>You've also been Blessed!</b> As a janitor you get all Blessed perks:<br>
+                <ul>
+                    <li><b>Multihatting</b>: Up to 3 hats at once. Try <var>/hat dank tophat</var>.</li>
+                    <li><b>4 extra skins</b> and <b>4 extra hats</b>.</li>
+                </ul>
+                <h3>Skins</h3>
+                <div class="roulette">
+                    <div class="card angel" onclick="cmd('angel')"></div>
+                    <div class="card glow" onclick="cmd('glow')"></div>
+                    <div class="card noob" onclick="cmd('noob')"></div>
+                    <div class="card gold" onclick="cmd('gold')"></div>
+                </div>
+                <h3>Hats</h3>
+                <div class="roulette">
+                    <div class="cardhat dank" onclick="cmd('hat dank')"></div>
+                    <div class="cardhat illuminati" onclick="cmd('hat illuminati')"></div>
+                    <div class="cardhat cigar" onclick="cmd('hat cigar')"></div>
+                    <div class="cardhat propeller" onclick="cmd('hat propeller')"></div>
+                </div>
+                <hr>
+                <small>Your janitor status is stored in your browser and will remain after reconnecting.</small>
+            </div>
+        `,
+        x: 200,
+        y: 50,
+        width: 620,
+        height: 560,
+    });
+}
+function djPopup() {
+    return new Dialog({
+        title: "YOU GOT DJ!",
+        class: "flex_window",
+        html: `
+            <div class="blessed_body">
+                <h1><marquee>YOU GOT DJ!</marquee></h1>
+                <p>With a DJ rank, You can now use /byoutube and /byoutubespeed. But there's rules:</p>
+                <h4>1. No abusing.</h4>
+                <h4>2. No putting stuff people don't like, always ask first.</h4>
+                <h4>3. No Gore/Pornography/Vore/NSFW on Background YouTube.</h4>
+                <small>Your DJ status is also stored in your browser and will remain after reconnecting.</small>
+            </div>
+        `,
+        x: 300,
+        y: 400,
+        width: 600,
+        height: 400,
+    });
+}
+start_button.onclick = () => {
+    start_menu.hidden = !start_menu.hidden;
+};
+function openCommunityContent() {
+    start_menu.hidden = true;
+    window.open("community.html", "_blank", "noopener");
+}
+const communityButton = document.getElementById("community_button");
+if (communityButton) {
+    communityButton.onclick = openCommunityContent;
+    communityButton.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openCommunityContent();
+        }
+    };
+}
+let appletsDialog = null;
+let notepadDialog = null;
+let jukeboxDialog = null;
+let cinemaAppletDialog = null;
+let restaurantDialog = null;
+const NOTEPAD_STORAGE_KEY = "bonziworld.notepad";
+
+function openNotepad() {
+    if (notepadDialog?.element?.isConnected) {
+        notepadDialog.focus();
+        return notepadDialog;
+    }
+
+    let savedText = "";
+    try {
+        savedText = localStorage.getItem(NOTEPAD_STORAGE_KEY) || "";
+    } catch {
+        // Private browsing modes may disable local storage; the editor still works.
+    }
+
+    const dialog = new Dialog({
+        title: "Notepad",
+        class: "flex_window notepad_window",
+        bodyClass: "notepad_body",
+        width: 560,
+        height: 410,
+        minWidth: 320,
+        minHeight: 220,
+        center: true,
+        onclose: () => {
+            if (notepadDialog === dialog) notepadDialog = null;
+        },
+        html: `
+            <div class="notepad_app">
+                <textarea class="notepad_text" aria-label="Notepad text" spellcheck="true"
+                    placeholder="Start typing..."></textarea>
+                <div class="notepad_statusbar">
+                    <span class="notepad_status" aria-live="polite">Ready</span>
+                    <button class="xp-button notepad_clear" type="button">Clear</button>
+                </div>
+            </div>
+        `,
+    });
+
+    const textArea = dialog.element.querySelector(".notepad_text");
+    const status = dialog.element.querySelector(".notepad_status");
+    const clearButton = dialog.element.querySelector(".notepad_clear");
+    textArea.value = savedText;
+
+    const saveText = () => {
+        try {
+            localStorage.setItem(NOTEPAD_STORAGE_KEY, textArea.value);
+            status.textContent = "Saved locally";
+        } catch {
+            status.textContent = "Local saving unavailable";
+        }
+    };
+
+    textArea.addEventListener("input", saveText);
+    clearButton.onclick = () => {
+        textArea.value = "";
+        saveText();
+        textArea.focus();
+    };
+
+    notepadDialog = dialog;
+    textArea.focus();
+    return dialog;
+}
+
+function openJukebox() {
+    if (jukeboxDialog?.element?.isConnected) {
+        jukeboxDialog.focus();
+        return jukeboxDialog;
+    }
+
+    const tracks = [];
+    let currentIndex = -1;
+    let audio = null;
+    const dialog = new Dialog({
+        title: "Jukebox",
+        class: "flex_window jukebox_window",
+        bodyClass: "media_applet_body",
+        width: 560,
+        height: 470,
+        minWidth: 340,
+        minHeight: 330,
+        center: true,
+        onclose: () => {
+            if (jukeboxDialog === dialog) jukeboxDialog = null;
+            if (audio) {
+                audio.pause();
+                audio.removeAttribute("src");
+                audio.load();
+            }
+            for (const track of tracks) {
+                if (track.objectUrl) URL.revokeObjectURL(track.objectUrl);
+            }
+        },
+        html: `
+            <div class="applet_application jukebox_app">
+                <form class="applet_source_form jukebox_url_form">
+                    <label class="applet_field">
+                        Direct audio URL
+                        <input class="applet_text_input jukebox_url" type="url" required
+                            placeholder="https://example.com/song.mp3">
+                    </label>
+                    <button class="xp-button" type="submit">Add URL</button>
+                </form>
+                <div class="applet_toolbar">
+                    <button class="xp-button jukebox_upload" type="button">Add audio files</button>
+                    <input class="jukebox_files" type="file" accept="audio/*" multiple hidden>
+                    <button class="xp-button jukebox_clear" type="button">Clear playlist</button>
+                </div>
+                <audio class="jukebox_audio" controls preload="metadata"></audio>
+                <div class="applet_queue jukebox_queue" role="list" aria-label="Jukebox playlist"></div>
+                <p class="applet_hint">Files stay in this browser. URLs must point directly to playable audio.</p>
+                <p class="applet_status jukebox_status" role="status" aria-live="polite">Ready.</p>
+            </div>
+        `,
+    });
+
+    jukeboxDialog = dialog;
+    audio = dialog.element.querySelector(".jukebox_audio");
+    const queue = dialog.element.querySelector(".jukebox_queue");
+    const status = dialog.element.querySelector(".jukebox_status");
+    const urlForm = dialog.element.querySelector(".jukebox_url_form");
+    const urlInput = dialog.element.querySelector(".jukebox_url");
+    const fileInput = dialog.element.querySelector(".jukebox_files");
+
+    function renderQueue() {
+        queue.replaceChildren();
+        if (!tracks.length) {
+            const empty = document.createElement("p");
+            empty.className = "applet_hint";
+            empty.textContent = "Your playlist is empty.";
+            queue.append(empty);
+            return;
+        }
+
+        tracks.forEach((track, index) => {
+            const row = document.createElement("div");
+            row.className = "jukebox_track";
+            row.setAttribute("role", "listitem");
+
+            const selectButton = document.createElement("button");
+            selectButton.className = "jukebox_track_select";
+            selectButton.type = "button";
+            selectButton.textContent = `${index + 1}. ${track.title}`;
+            selectButton.setAttribute("aria-pressed", String(index === currentIndex));
+            selectButton.onclick = () => selectTrack(index, true);
+
+            const removeButton = document.createElement("button");
+            removeButton.className = "xp-button jukebox_remove";
+            removeButton.type = "button";
+            removeButton.textContent = "Remove";
+            removeButton.setAttribute("aria-label", `Remove ${track.title}`);
+            removeButton.onclick = () => removeTrack(index);
+
+            row.append(selectButton, removeButton);
+            queue.append(row);
+        });
+    }
+
+    function selectTrack(index, autoplay = false) {
+        const track = tracks[index];
+        if (!track) return;
+        currentIndex = index;
+        audio.src = track.src;
+        audio.load();
+        status.textContent = `Selected: ${track.title}`;
+        renderQueue();
+        if (autoplay) {
+            const playRequest = audio.play();
+            if (playRequest?.catch) {
+                playRequest.catch(() => {
+                    status.textContent = "Playback was blocked. Use the audio controls to start.";
+                });
+            }
+        }
+    }
+
+    function addTrack(track) {
+        tracks.push(track);
+        if (currentIndex < 0) selectTrack(0);
+        else renderQueue();
+        status.textContent = `Added: ${track.title}`;
+    }
+
+    function removeTrack(index) {
+        const [removed] = tracks.splice(index, 1);
+        if (!removed) return;
+        if (removed.objectUrl) URL.revokeObjectURL(removed.objectUrl);
+
+        if (index === currentIndex) {
+            audio.pause();
+            audio.removeAttribute("src");
+            audio.load();
+            currentIndex = -1;
+            if (tracks.length) selectTrack(Math.min(index, tracks.length - 1));
+        } else if (index < currentIndex) {
+            currentIndex--;
+        }
+        renderQueue();
+        status.textContent = `Removed: ${removed.title}`;
+    }
+
+    urlForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        let parsed;
+        try {
+            parsed = new URL(urlInput.value.trim());
+        } catch {
+            status.textContent = "Enter a valid direct audio URL.";
+            return;
+        }
+        if (!["http:", "https:"].includes(parsed.protocol)) {
+            status.textContent = "Audio URLs must use HTTP or HTTPS.";
+            return;
+        }
+
+        let title = parsed.pathname.split("/").filter(Boolean).pop() || parsed.hostname;
+        try {
+            title = decodeURIComponent(title);
+        } catch {
+            // Keep the encoded filename if it contains malformed escapes.
+        }
+        addTrack({ title, src: parsed.href, objectUrl: null });
+        urlInput.value = "";
+    });
+
+    fileInput.addEventListener("change", () => {
+        let added = 0;
+        for (const file of fileInput.files || []) {
+            if (file.type && !file.type.startsWith("audio/")) continue;
+            try {
+                const objectUrl = URL.createObjectURL(file);
+                addTrack({
+                    title: file.name || "Local audio",
+                    src: objectUrl,
+                    objectUrl,
+                });
+                added++;
+            } catch {
+                status.textContent = "This browser could not open one of the selected files.";
+            }
+        }
+        if (!added && fileInput.files?.length) {
+            status.textContent = "Choose audio files such as MP3, WAV, OGG, or M4A.";
+        } else if (added) {
+            status.textContent = `Added ${added} audio file${added === 1 ? "" : "s"}.`;
+        }
+        fileInput.value = "";
+    });
+
+    audio.addEventListener("ended", () => {
+        if (currentIndex >= 0 && currentIndex + 1 < tracks.length) {
+            selectTrack(currentIndex + 1, true);
+        } else {
+            status.textContent = "Playlist finished.";
+        }
+    });
+    audio.addEventListener("error", () => {
+        if (currentIndex >= 0) {
+            status.textContent = "This source could not be played. Try another file or direct audio URL.";
+        }
+    });
+
+    dialog.element.querySelector(".jukebox_upload").onclick = () => fileInput.click();
+    dialog.element.querySelector(".jukebox_clear").onclick = () => {
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+        for (const track of tracks) {
+            if (track.objectUrl) URL.revokeObjectURL(track.objectUrl);
+        }
+        tracks.length = 0;
+        currentIndex = -1;
+        renderQueue();
+        status.textContent = "Playlist cleared.";
+    };
+
+    renderQueue();
+    return dialog;
+}
+
+function parseYouTubeVideoId(input) {
+    const value = String(input || "").trim();
+    const validId = /^[A-Za-z0-9_-]{11}$/;
+    if (validId.test(value)) return value;
+
+    let url;
+    try {
+        url = new URL(value);
+    } catch {
+        return null;
+    }
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+
+    const host = url.hostname.toLowerCase();
+    let id = null;
+    if (host === "youtu.be" || host === "www.youtu.be") {
+        id = url.pathname.split("/").filter(Boolean)[0] || null;
+    } else if ([
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "music.youtube.com",
+        "youtube-nocookie.com",
+        "www.youtube-nocookie.com",
+    ].includes(host)) {
+        if (url.pathname === "/watch") {
+            id = url.searchParams.get("v");
+        } else {
+            id = url.pathname.match(/^\/(?:embed|shorts|live)\/([^/]+)/i)?.[1] || null;
+        }
+    }
+    return id && validId.test(id) ? id : null;
+}
+
+function openCinemaVideoManager(initialVideos) {
+    if (!bigowner) return;
+    const parsedVideos = parseCinemaVideoRotation(initialVideos);
+    if (!parsedVideos) return;
+
+    if (cinemaVideoManagerDialog?.element?.isConnected) {
+        cinemaVideoManagerDialog.focus();
+        cinemaVideoManagerState?.replace(parsedVideos, "Shared rotation loaded.");
+        return cinemaVideoManagerDialog;
+    }
+
+    let videos = parsedVideos;
+    let saving = false;
+    const dialog = new Dialog({
+        title: "Manage Cinema Videos",
+        class: "flex_window cinema_manager_window",
+        bodyClass: "media_applet_body",
+        width: 560,
+        height: 500,
+        minWidth: 360,
+        minHeight: 340,
+        center: true,
+        onclose: () => {
+            if (cinemaVideoManagerDialog === dialog) {
+                cinemaVideoManagerDialog = null;
+                cinemaVideoManagerState = null;
+            }
+        },
+        html: `
+            <div class="cinema_manager_app">
+                <p class="applet_hint">Manage the shared video rotation used in the Cinema room. Changes are saved for everyone.</p>
+                <form class="cinema_add_form cinema_manager_form">
+                    <label class="applet_field">
+                        YouTube video URL or ID
+                        <input class="applet_text_input cinema_manager_url" type="text" required
+                            autocomplete="off" autocapitalize="off" placeholder="Paste a YouTube link or video ID">
+                    </label>
+                    <button class="xp-button cinema_manager_add" type="submit">Add video</button>
+                </form>
+                <p class="applet_hint">Use the arrows to change order. Up to ${MAX_CINEMA_VIDEO_COUNT} videos.</p>
+                <div class="applet_queue cinema_manager_queue" role="list" aria-label="Shared cinema video rotation"></div>
+                <p class="applet_status cinema_manager_status" role="status" aria-live="polite">Shared rotation loaded.</p>
+            </div>
+        `,
+    });
+
+    cinemaVideoManagerDialog = dialog;
+    const form = dialog.element.querySelector(".cinema_manager_form");
+    const videoInput = dialog.element.querySelector(".cinema_manager_url");
+    const queue = dialog.element.querySelector(".cinema_manager_queue");
+    const status = dialog.element.querySelector(".cinema_manager_status");
+
+    function setBusy(busy) {
+        dialog.element.querySelectorAll("button, input").forEach((control) => {
+            control.disabled = busy;
+        });
+    }
+
+    function renderQueue() {
+        queue.replaceChildren();
+        if (!videos.length) {
+            const empty = document.createElement("p");
+            empty.className = "applet_hint";
+            empty.textContent = "No videos are in the shared rotation.";
+            queue.append(empty);
+            return;
+        }
+
+        videos.forEach((videoId, index) => {
+            const row = document.createElement("div");
+            row.className = "cinema_track cinema_manager_track";
+            row.dataset.videoId = videoId;
+            row.setAttribute("role", "listitem");
+
+            const label = document.createElement("span");
+            label.className = "cinema_manager_label";
+            label.textContent = `${index + 1}. ${videoId}`;
+
+            const controls = document.createElement("div");
+            controls.className = "cinema_manager_controls";
+
+            const moveUp = document.createElement("button");
+            moveUp.className = "xp-button cinema_move_up";
+            moveUp.type = "button";
+            moveUp.textContent = "↑";
+            moveUp.setAttribute("aria-label", `Move video ${index + 1} up`);
+            moveUp.disabled = saving || index === 0;
+            moveUp.onclick = () => {
+                const nextVideos = [...videos];
+                [nextVideos[index - 1], nextVideos[index]] =
+                    [nextVideos[index], nextVideos[index - 1]];
+                saveVideos(nextVideos);
+            };
+
+            const moveDown = document.createElement("button");
+            moveDown.className = "xp-button cinema_move_down";
+            moveDown.type = "button";
+            moveDown.textContent = "↓";
+            moveDown.setAttribute("aria-label", `Move video ${index + 1} down`);
+            moveDown.disabled = saving || index === videos.length - 1;
+            moveDown.onclick = () => {
+                const nextVideos = [...videos];
+                [nextVideos[index], nextVideos[index + 1]] =
+                    [nextVideos[index + 1], nextVideos[index]];
+                saveVideos(nextVideos);
+            };
+
+            const remove = document.createElement("button");
+            remove.className = "xp-button cinema_remove";
+            remove.type = "button";
+            remove.textContent = "Remove";
+            remove.setAttribute("aria-label", `Remove video ${videoId}`);
+            remove.disabled = saving;
+            remove.onclick = () => {
+                saveVideos(videos.filter((candidate) => candidate !== videoId));
+            };
+
+            controls.append(moveUp, moveDown, remove);
+            row.append(label, controls);
+            queue.append(row);
+        });
+    }
+
+    function replaceVideos(nextVideos, message = "Shared rotation updated.") {
+        const normalized = parseCinemaVideoRotation(nextVideos);
+        if (!normalized) return;
+        videos = normalized;
+        saving = false;
+        setBusy(false);
+        renderQueue();
+        status.textContent = message;
+    }
+
+    function reportError(message) {
+        saving = false;
+        setBusy(false);
+        status.textContent = message;
+    }
+
+    function saveVideos(nextVideos) {
+        if (saving) return;
+        const normalized = parseCinemaVideoRotation(nextVideos);
+        if (!normalized) {
+            status.textContent = "The video list is invalid.";
+            return;
+        }
+        saving = true;
+        setBusy(true);
+        renderQueue();
+        status.textContent = "Saving the shared rotation…";
+        socket.emit("saveCinemaVideoRotation", { videos: normalized });
+    }
+
+    form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (saving) return;
+        const videoId = parseYouTubeVideoId(videoInput.value);
+        if (!videoId) {
+            status.textContent = "Enter a valid YouTube URL or 11-character video ID.";
+            return;
+        }
+        if (videos.includes(videoId)) {
+            status.textContent = "That video is already in the rotation.";
+            return;
+        }
+        if (videos.length >= MAX_CINEMA_VIDEO_COUNT) {
+            status.textContent = `The rotation can contain at most ${MAX_CINEMA_VIDEO_COUNT} videos.`;
+            return;
+        }
+        saveVideos([...videos, videoId]);
+        videoInput.value = "";
+    });
+
+    cinemaVideoManagerState = { replace: replaceVideos, reportError };
+    renderQueue();
+    return dialog;
+}
+
+function openCinemaApplet() {
+    if (cinemaAppletDialog?.element?.isConnected) {
+        cinemaAppletDialog.focus();
+        return cinemaAppletDialog;
+    }
+
+    const videos = [];
+    let currentIndex = -1;
+    let player = null;
+    const dialog = new Dialog({
+        title: "Cinema",
+        class: "flex_window cinema_applet_window",
+        bodyClass: "media_applet_body",
+        width: 660,
+        height: 560,
+        minWidth: 360,
+        minHeight: 420,
+        center: true,
+        onclose: () => {
+            if (cinemaAppletDialog === dialog) cinemaAppletDialog = null;
+            player?.replaceChildren();
+            videos.length = 0;
+        },
+        html: `
+            <div class="applet_application cinema_app">
+                <form class="cinema_add_form">
+                    <label class="applet_field">
+                        YouTube video URL or ID
+                        <input class="applet_text_input cinema_url" type="text" required
+                            autocomplete="off" autocapitalize="off" placeholder="Paste a YouTube link or video ID">
+                    </label>
+                    <label class="applet_field">
+                        Display name (optional)
+                        <input class="applet_text_input cinema_title" type="text" maxlength="100"
+                            placeholder="Video title">
+                    </label>
+                    <button class="xp-button" type="submit">Add video</button>
+                </form>
+                <div class="cinema_player" aria-live="polite">
+                    <p class="applet_hint">Add a YouTube video, then select it from your list.</p>
+                </div>
+                <div class="applet_toolbar cinema_controls">
+                    <button class="xp-button cinema_previous" type="button">Previous</button>
+                    <button class="xp-button cinema_next" type="button">Next</button>
+                    <button class="xp-button cinema_clear" type="button">Clear list</button>
+                </div>
+                <div class="applet_queue cinema_queue" role="list" aria-label="Cinema playlist"></div>
+                <p class="applet_hint">Your video list stays in this browser. YouTube playback is embedded from youtube-nocookie.com.</p>
+                <p class="applet_status cinema_status" role="status" aria-live="polite">Ready.</p>
+            </div>
+        `,
+    });
+
+    cinemaAppletDialog = dialog;
+    player = dialog.element.querySelector(".cinema_player");
+    const queue = dialog.element.querySelector(".cinema_queue");
+    const status = dialog.element.querySelector(".cinema_status");
+    const urlInput = dialog.element.querySelector(".cinema_url");
+    const titleInput = dialog.element.querySelector(".cinema_title");
+
+    function showCinemaMessage(message) {
+        const text = document.createElement("p");
+        text.className = "applet_hint";
+        text.textContent = message;
+        player.replaceChildren(text);
+    }
+
+    function playVideo(index) {
+        const video = videos[index];
+        if (!video) return;
+        currentIndex = index;
+        const iframe = document.createElement("iframe");
+        iframe.src = `https://www.youtube-nocookie.com/embed/${video.id}?rel=0`;
+        iframe.title = video.title;
+        iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+        iframe.allowFullscreen = true;
+        iframe.referrerPolicy = "strict-origin-when-cross-origin";
+        player.replaceChildren(iframe);
+        status.textContent = `Playing: ${video.title}`;
+        renderQueue();
+    }
+
+    function renderQueue() {
+        queue.replaceChildren();
+        if (!videos.length) {
+            const empty = document.createElement("p");
+            empty.className = "applet_hint";
+            empty.textContent = "No videos added yet.";
+            queue.append(empty);
+            return;
+        }
+
+        videos.forEach((video, index) => {
+            const row = document.createElement("div");
+            row.className = "cinema_track";
+            row.setAttribute("role", "listitem");
+
+            const selectButton = document.createElement("button");
+            selectButton.className = "cinema_track_select";
+            selectButton.type = "button";
+            selectButton.textContent = video.title;
+            selectButton.setAttribute("aria-pressed", String(index === currentIndex));
+            selectButton.onclick = () => playVideo(index);
+
+            const removeButton = document.createElement("button");
+            removeButton.className = "xp-button cinema_remove";
+            removeButton.type = "button";
+            removeButton.textContent = "Remove";
+            removeButton.setAttribute("aria-label", `Remove ${video.title}`);
+            removeButton.onclick = () => {
+                videos.splice(index, 1);
+                if (index === currentIndex) {
+                    currentIndex = -1;
+                    showCinemaMessage("Select a video to play.");
+                } else if (index < currentIndex) {
+                    currentIndex--;
+                }
+                renderQueue();
+                status.textContent = "Video removed.";
+            };
+
+            row.append(selectButton, removeButton);
+            queue.append(row);
+        });
+    }
+
+    dialog.element.querySelector(".cinema_add_form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const id = parseYouTubeVideoId(urlInput.value);
+        if (!id) {
+            status.textContent = "Enter a valid YouTube video URL or 11-character video ID.";
+            return;
+        }
+        const title = titleInput.value.trim() || `YouTube video ${id}`;
+        videos.push({ id, title });
+        urlInput.value = "";
+        titleInput.value = "";
+        renderQueue();
+        status.textContent = `Added: ${title}`;
+    });
+
+    dialog.element.querySelector(".cinema_previous").onclick = () => {
+        if (!videos.length) return;
+        playVideo(currentIndex <= 0 ? videos.length - 1 : currentIndex - 1);
+    };
+    dialog.element.querySelector(".cinema_next").onclick = () => {
+        if (!videos.length) return;
+        playVideo(currentIndex < 0 || currentIndex + 1 >= videos.length ? 0 : currentIndex + 1);
+    };
+    dialog.element.querySelector(".cinema_clear").onclick = () => {
+        videos.length = 0;
+        currentIndex = -1;
+        showCinemaMessage("Add a YouTube video, then select it from your list.");
+        renderQueue();
+        status.textContent = "Video list cleared.";
+    };
+
+    renderQueue();
+    return dialog;
+}
+
+const RESTAURANT_MENU = [
+    { category: "Sides", items: ["Chips"] },
+    { category: "Pizza", items: ["Pepperoni pizza", "Cheese pizza"] },
+    { category: "Burgers", items: ["Hamburger", "Cheeseburger"] },
+    { category: "Drinks", items: ["Coke", "Fanta", "Sprite", "7up", "Pepsi"] },
+];
+
+function openRestaurant() {
+    if (restaurantDialog?.element?.isConnected) {
+        restaurantDialog.focus();
+        return restaurantDialog;
+    }
+
+    const order = new Map();
+    const dialog = new Dialog({
+        title: "BonziRESTAURANT",
+        class: "flex_window restaurant_window",
+        bodyClass: "media_applet_body",
+        width: 440,
+        height: 500,
+        minWidth: 320,
+        minHeight: 360,
+        center: true,
+        onclose: () => {
+            if (restaurantDialog === dialog) restaurantDialog = null;
+        },
+        html: `
+            <div class="applet_application restaurant_app">
+                <h2>BonziRESTAURANT Menu</h2>
+                <label class="applet_field">
+                    Choose an item
+                    <select class="applet_select restaurant_choice"></select>
+                </label>
+                <div class="applet_toolbar">
+                    <button class="xp-button restaurant_add" type="button">Add to order</button>
+                    <button class="xp-button restaurant_clear" type="button">Clear order</button>
+                </div>
+                <h3>Your order</h3>
+                <ul class="restaurant_order" aria-label="Your order"></ul>
+                <button class="xp-button restaurant_place" type="button">Place order</button>
+                <p class="applet_status restaurant_status" role="status" aria-live="polite">Choose something from the menu.</p>
+                <p class="applet_hint">This is a local order slip. No prices, payment, or delivery are connected.</p>
+            </div>
+        `,
+    });
+
+    restaurantDialog = dialog;
+    const select = dialog.element.querySelector(".restaurant_choice");
+    const orderList = dialog.element.querySelector(".restaurant_order");
+    const status = dialog.element.querySelector(".restaurant_status");
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select a menu item…";
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    select.append(placeholder);
+
+    for (const group of RESTAURANT_MENU) {
+        const optgroup = document.createElement("optgroup");
+        optgroup.label = group.category;
+        for (const item of group.items) {
+            const option = document.createElement("option");
+            option.value = item;
+            option.textContent = item;
+            optgroup.append(option);
+        }
+        select.append(optgroup);
+    }
+
+    function renderOrder() {
+        orderList.replaceChildren();
+        if (!order.size) {
+            const empty = document.createElement("li");
+            empty.className = "applet_hint";
+            empty.textContent = "No items in your order.";
+            orderList.append(empty);
+            return;
+        }
+
+        for (const [item, quantity] of order) {
+            const row = document.createElement("li");
+            row.className = "restaurant_order_row";
+            const label = document.createElement("span");
+            label.textContent = `${quantity} × ${item}`;
+            const remove = document.createElement("button");
+            remove.className = "xp-button restaurant_remove";
+            remove.type = "button";
+            remove.textContent = "−";
+            remove.setAttribute("aria-label", `Remove one ${item}`);
+            remove.onclick = () => {
+                if (quantity <= 1) order.delete(item);
+                else order.set(item, quantity - 1);
+                renderOrder();
+                status.textContent = `${item} updated.`;
+            };
+            row.append(label, remove);
+            orderList.append(row);
+        }
+    }
+
+    dialog.element.querySelector(".restaurant_add").onclick = () => {
+        const item = select.value;
+        if (!item) {
+            status.textContent = "Choose an item before adding it.";
+            return;
+        }
+        order.set(item, (order.get(item) || 0) + 1);
+        renderOrder();
+        status.textContent = `Added ${item}.`;
+    };
+    dialog.element.querySelector(".restaurant_clear").onclick = () => {
+        order.clear();
+        renderOrder();
+        status.textContent = "Order cleared.";
+    };
+    dialog.element.querySelector(".restaurant_place").onclick = () => {
+        if (!order.size) {
+            status.textContent = "Add at least one item before placing an order.";
+            return;
+        }
+        const summary = [...order].map(([item, quantity]) => `${quantity} × ${item}`).join(", ");
+        order.clear();
+        renderOrder();
+        status.textContent = `Order placed: ${summary}.`;
+    };
+
+    renderOrder();
+    return dialog;
+}
+
+function openApplets() {
+    if (appletsDialog?.element?.isConnected) {
+        appletsDialog.focus();
+        return appletsDialog;
+    }
+
+    const dialog = new Dialog({
+        title: "Applets",
+        class: "flex_window applets_window",
+        bodyClass: "applets_body",
+        width: 340,
+        height: 320,
+        minWidth: 320,
+        minHeight: 260,
+        resizable: false,
+        center: true,
+        onclose: () => {
+            if (appletsDialog === dialog) appletsDialog = null;
+        },
+        html: `
+            <div class="applet_list">
+                <button class="applet_launcher" type="button" data-applet="notepad">
+                    <span class="applet_launcher_icon" aria-hidden="true">✎</span>
+                    <span class="applet_launcher_copy">
+                        <strong>Notepad</strong>
+                        <small>Write a quick local note.</small>
+                    </span>
+                </button>
+                <button class="applet_launcher" type="button" data-applet="jukebox">
+                    <span class="applet_launcher_icon" aria-hidden="true">♫</span>
+                    <span class="applet_launcher_copy">
+                        <strong>Jukebox</strong>
+                        <small>Play local files or direct audio links.</small>
+                    </span>
+                </button>
+                <button class="applet_launcher" type="button" data-applet="cinema">
+                    <span class="applet_launcher_icon" aria-hidden="true">▶</span>
+                    <span class="applet_launcher_copy">
+                        <strong>Cinema</strong>
+                        <small>Make a playlist of YouTube videos.</small>
+                    </span>
+                </button>
+                <button class="applet_launcher" type="button" data-applet="restaurant">
+                    <span class="applet_launcher_icon" aria-hidden="true">🍔</span>
+                    <span class="applet_launcher_copy">
+                        <strong>BonziRESTAURANT</strong>
+                        <small>Build a BonziWORLD menu order.</small>
+                    </span>
+                </button>
+            </div>
+        `,
+    });
+
+    const appletLaunchers = {
+        notepad: openNotepad,
+        jukebox: openJukebox,
+        cinema: openCinemaApplet,
+        restaurant: openRestaurant,
+    };
+    dialog.element.querySelectorAll(".applet_launcher").forEach((button) => {
+        button.onclick = () => {
+            const launch = appletLaunchers[button.dataset.applet];
+            if (!launch) return;
+            appletsDialog = null;
+            dialog.element.remove();
+            launch();
+        };
+    });
+
+    appletsDialog = dialog;
+    return dialog;
+}
+
+const appletsButton = document.getElementById("applets_button");
+if (appletsButton) {
+    appletsButton.onclick = () => {
+        start_menu.hidden = true;
+        openApplets();
+    };
+}
+const gamesButton = document.getElementById("gmes_button");
+if (gamesButton) {
+    gamesButton.onclick = () => {
+        start_menu.hidden = true;
+        window.open("community-edition/arcade/", "_blank", "noopener");
+    };
+}
+
+function openDmWindow(peerGuid, peerName) {
+    if (dmWindows.has(peerGuid)) {
+        const existing = dmWindows.get(peerGuid);
+        existing.dialog.element.style.zIndex = lastZ++ + 9999;
+        existing.input.focus();
+        return existing;
+    }
+    const dialog = new Dialog({
+        title: `DM ${peerName}`,
+        class: "flex_window",
+        x: 60 + Math.floor(Math.random() * 180),
+        y: 60 + Math.floor(Math.random() * 100),
+        width: 360,
+        height: 320,
+        onclose: () => dmWindows.delete(peerGuid),
+        html: `
+            <div style="display:flex;flex-direction:column;height:100%;box-sizing:border-box;">
+                <div class="dm_log" style="flex:1;overflow-y:auto;padding:4px;border-bottom:1px solid #aaa;"></div>
+                <div style="display:flex;gap:4px;padding:4px;">
+                    <input class="dm_input" type="text" placeholder="Message..." maxlength="300" style="flex:1;">
+                    <button class="xp-button dm_send">Send</button>
+                </div>
+            </div>
+        `,
+    });
+
+    const logEl   = dialog.element.querySelector(".dm_log");
+    const inputEl = dialog.element.querySelector(".dm_input");
+    const sendBtn = dialog.element.querySelector(".dm_send");
+
+    function sendDm() {
+        const text = inputEl.value.trim();
+        if (!text) return;
+        inputEl.value = "";
+        socket.emit("dm", { to: peerGuid, text });
+        appendDmEntry(logEl, me, text);
+        inputEl.focus();
+    }
+
+    sendBtn.onclick = sendDm;
+    inputEl.onkeypress = (e) => { if (e.which === 13) sendDm(); };
+    inputEl.focus();
+
+    const entry = { dialog, logEl, input: inputEl, peerName };
+    dmWindows.set(peerGuid, entry);
+    return entry;
+}
+
+function appendDmEntry(logEl, fromGuid, text) {
+    const pub = usersPublic.get(fromGuid) || {};
+    const name = pub.name || "Unknown";
+    const color = pub.color || "purple";
+    const [baseColor, ...hats] = color.split(" ");
+    const atBottom = logEl.scrollHeight - logEl.clientHeight - logEl.scrollTop <= 20;
+    logEl.insertAdjacentHTML("beforeend", `
+        <hr>
+        <div class="log_message">
+            <div class="log_icon">
+                <img class="color" src="img/pfp/${baseColor}.webp">
+                ${hats.map(h => `<img class="hat" src="img/pfp/${h}.webp">`).join("")}
+            </div>
+            <div class="log_message_cont">
+                <span><b>${nmarkup(name)}</b> <span class="log_time">${time()}</span></span>
+                <div class="log_message_content">${markup(text)}</div>
+            </div>
+        </div>
+    `);
+    if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+}
+function userInfoPopup(userGuid) {
+    const guid = sanitize(userGuid || "");
+    new Dialog({
+        title: "User ID (GUID)",
+        class: "flex_window user_info",
+        html: `
+            <div style="padding: 12px; line-height: 1.7;">
+                <b>GUID:</b> <code>${guid}</code>
+            </div>
+        `,
+        x: 200,
+        y: 200,
+        width: 300,
+        height: 100,
+    });
+}
+function bonziEditorPopup() {
+    let dialog = new Dialog({
+        title: "Bonzi Editor",
+        class: "flex_window bonzi_editor",
+        html: `
+            <div class="hbox fill">
+                <div class="hats">
+                    <h2>Colors</h1>
+                    <div class="editor-grid color-grid"></div>
+                    <h2>Hats</h1>
+                    <div class="editor-grid hat-grid"></div>
+                    <h2>Unlockable</h2>
+                    <div class="editor-grid unlockable-grid"></div>
+                </div>
+                <div class="preview-container">
+                    Preview
+                    <div class="preview"></div>
+                </div>
+            </div>
+        `,
+        x: 200,
+        y: 200,
+        width: 600,
+        height: 400,
+    });
+    let element = dialog.element;
+    function itemElements(selector, itemArray, path, callback, { isLocked, tooltip } = {}) {
+        let grid = element.querySelector(selector);
+        for (let hat of itemArray) {
+            let item = document.createElement("div");
+            const remoteAsset = REMOTE_BONZI_ASSET_URLS[hat];
+            item.style.backgroundImage = remoteAsset
+                ? resolveBonziAssetUrl(hat)
+                : `url("${path}/${hat}.webp")`;
+            if (selector === ".color-grid" && REMOTE_SPRITE_COLORS.has(hat)) {
+                item.style.backgroundSize = "600px 520px";
+                item.style.backgroundPosition = "0 0";
+            }
+            item.className = "editor-item";
+            if (isLocked?.(hat)) item.classList.add("locked-item");
+            item.setAttribute("data-tooltip", tooltip?.(hat) ?? hat);
+            item.setAttribute("data-hat", hat);
+            item.onclick = () => {
+                callback(hat);
+            };
+            grid.appendChild(item);
+        }
+    }
+    function insertHatSection(title, className, hats, path, tooltip) {
+        const hatsPanel = element.querySelector(".hats");
+        const unlockableHeading = element.querySelector(".unlockable-grid").previousElementSibling;
+        const heading = document.createElement("h2");
+        heading.textContent = title;
+        const grid = document.createElement("div");
+        grid.className = `editor-grid ${className}`;
+        hatsPanel.insertBefore(heading, unlockableHeading);
+        hatsPanel.insertBefore(grid, unlockableHeading);
+        itemElements(`.${className}`, hats, path, (hat) => cmd(`hat ${hat}`), {
+            tooltip: (hat) => `${hat}\n${tooltip}`,
+        });
+    }
+    const editorColors = [...BonziData.colors.normal, "radicalblue"];
+    if (isBlessedRank()) editorColors.push("applecat");
+    if (contributor || developer || owner || radical || bigowner) editorColors.push("radicalpink");
+    if (developer || owner || radical || bigowner) editorColors.push(...AUTO_DEVELOPER_SKINS);
+    if (radical || bigowner) editorColors.push("greenjimmy");
+    if (bigowner) editorColors.push("bluejimmy");
+    itemElements(".color-grid", [...new Set(editorColors)], "img/pfp", (color) => {
+        cmd(DEDICATED_APPEARANCE_COMMANDS.has(color) ? color : `color ${color}`);
+    });
+    itemElements(".hat-grid", BonziData.hats.normal, "img/haticon", (hat) => cmd(`hat ${hat}`));
+    if (isBlessedRank()) {
+        insertHatSection("Blessed hats", "blessed-hat-grid", BonziData.hats.blessed, "img/bonzi", "Blessed+ only");
+    }
+    itemElements(".unlockable-grid", BonziData.hats.vault, "img/haticon", (hat) => cmd(`hat ${hat}`), {
+        isLocked: (hat) => !unlocks.includes(hat),
+        tooltip: (hat) => `${hat}\nUnlocked in the vault`,
+    });
+    itemElements(".unlockable-grid", BonziData.hats.event.filter(hat => unlocks.includes(hat)), "img/haticon", (hat) => cmd(`hat ${hat}`), {
+        tooltip: (hat) => `${hat}\nFormerly unlocked in the 2026 April Fools event`,
+    });
+    if (janitor || admin || king || pope || owner || radical || bigowner) {
+        insertHatSection("Moderator hats", "mod-hat-grid", BonziData.hats.mod, "img/haticon", "Moderator-only");
+    }
+    if (pope || owner || radical || bigowner) {
+        insertHatSection("Pope+ hats", "pope-hat-grid", BonziData.hats.pope, "img/bonzi", "Pope+ only");
+    }
+    let preview = element.querySelector(".preview");
+    let myColor = bonzis.get(me).color;
+    preview.style.backgroundImage = myColor.split(" ").map(resolveBonziAssetUrl).reverse().join(", ");
+    preview.style.backgroundSize = "";
+    preview.style.backgroundRepeat = "";
+}
+
+start_menu_pfp.onclick = () => {
+    start_menu.hidden = true;
+    bonziEditorPopup();
+};
+
+start_menu_name.onkeyup = (e) => {
+    if (e.key === "Enter") {
+        cmd(`name ${start_menu_name.value}`);
+    }
+};
+
+start_menu_name.onblur = () => {
+    cmd(`name ${start_menu_name.value}`);
+};
+
+settings_button.onclick = () => {
+    start_menu.hidden = true;
+    openSettings();
+};
+
+function pollCreatorPopup() {
+    let dialog = new Dialog({
+        title: "Poll Creator",
+        class: "flex_window poll_creator",
+        x: 150,
+        y: 100,
+        width: 300,
+        height: 410,
+        resizable: false,
+        html: `
+            <div class="poll-creator-body">
+                <textarea class="poll-title" placeholder="Ask a question" maxlength="1000"></textarea>
+                <hr>
+                Options:
+                <div class="poll-options"></div>
+                <div class="poll-buttons">
+                    <button class="xp-button add-option">Add Option</button>
+                    <button class="xp-button create-poll">Create Poll</button>
+                </div>
+            </div>
+        `,
+    });
+    let element = dialog.element;
+    let optionsContainer = element.querySelector(".poll-options");
+    let addOptionButton = element.querySelector(".add-option");
+    let options = [];
+
+    function addOption() {
+        if (options.length >= 5) return;
+        let optionRow = document.createElement("div");
+        optionRow.className = "poll-option-row";
+        optionRow.innerHTML = `
+        <input type="text" placeholder="Option ${options.length + 1}" maxlength="50">
+        <button class="xp-button delete-option">X</button>
+        `;
+        optionRow.querySelector(".delete-option").onclick = () => {
+            if (optionsContainer.children.length > 2) {
+                optionRow.remove();
+                options.splice(options.indexOf(optionRow), 1);
+                updatePoll();
+            }
+        };
+        options.push(optionRow);
+        optionsContainer.appendChild(optionRow);
+        updatePoll();
+    }
+
+    function updatePoll() {
+        for(let i = 0; i < options.length; i++) {
+            options[i].querySelector("input").placeholder = `Option ${i + 1}`;
+        }
+        for (let el of element.querySelectorAll(".delete-option")) {
+            el.disabled = options.length <= 2;
+        }
+        addOptionButton.disabled = options.length >= 5;
+    }
+
+    addOption();
+    addOption();
+
+    addOptionButton.onclick = () => {
+        if (options.length < 5) addOption();
+    };
+
+
+    element.querySelector(".create-poll").onclick = () => {
+        let title = element.querySelector(".poll-title").value.trim();
+        let options = [...optionsContainer.querySelectorAll("input")]
+            .map(input => input.value.trim())
+            .filter(val => val.length > 0);
+        let cmd_str = `advpoll ${title.replace(/[;\\]/g, "\\$&")}`;
+        cmd_str += `;${options.map(option => option.replace(/[;\\]/g, "\\$&")).join(";")}`;
+        cmd(cmd_str);
+        dialog.element.remove();
+    };
+}
+
+
+poll_button.onclick = () => {
+    start_menu.hidden = true;
+    pollCreatorPopup();
+};
+queue_button.hidden = true;  // hidden by default until janitor status confirmed
+
+queue_button.onclick = () => {
+    start_menu.hidden = true;
+    openJanitorQueue();
+};
+function uploadPopup(initialFile) {
+    let blobUrl = null;
+    let dialog = new Dialog({
+        title: "Upload",
+        class: "flex_window",
+        x: 20,
+        y: 50,
+        width: 400,
+        height: 300,
+        html: `
+            <div class="upload_dropzone"></div>
+            <div style="height: 2px;"></div>
+            <input type="file" accept="image/*" class="upload_input" hidden>
+            <div class="upload_buttons">
+                <div class="fill"><img src="/img/misc/upload.png" class="upload_icon"> Powered by <a href="https://upload.bonziworld.kr">BonziUPLOAD</a></div>
+                <button class="xp-button upload_button" disabled>Upload</button>
+            </div>
+        `,
+        onclose: () => {
+            if (blobUrl) URL.revokeObjectURL(blobUrl);
+        },
+    });
+    let element = dialog.element;
+    let dropzone = element.querySelector(".upload_dropzone");
+    let button = element.querySelector(".upload_button");
+    let fileInput = element.querySelector(".upload_input");
+    let blob = null;
+
+    function loadFile(file) {
+        if (!file) return;
+        blob = file;
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        blobUrl = URL.createObjectURL(blob);
+        dropzone.style.background = `url("${blobUrl}") center center / contain no-repeat`;
+        button.disabled = false;
+    }
+
+    if (initialFile) loadFile(initialFile);
+
+    dropzone.onclick = () => fileInput.click();
+    fileInput.onchange = () => loadFile(fileInput.files[0]);
+
+    dropzone.ondragover = (e) => {
+        e.preventDefault();
+        dropzone.style.borderColor = "#003c74";
+    };
+
+    dropzone.ondragleave = () => {
+        dropzone.style.borderColor = "";
+    };
+
+    dropzone.ondrop = (e) => {
+        e.preventDefault();
+        dropzone.style.borderColor = "";
+        loadFile(e.dataTransfer.files[0]);
+    };
+    button.onclick = async () => {
+        if (!blobUrl) return;
+
+        let formData = new FormData();
+        formData.append("file", blob, "image.png");
+
+        try {
+            let response = await fetch("https://upload.bonziworld.kr/api/v1/upload", {
+                method: "POST",
+                body: formData,
+            });
+
+            let data = await response.json();
+            let url = "https://upload.bonziworld.kr" + data.url;
+
+            console.log(url);
+            cmd(`img ${url}`);
+            dialog.element.remove();
+        } catch (e) {
+            console.error(e);
+        }
+    };
+}
+
+const imageButton = document.getElementById("image_button");
+if (imageButton) {
+    imageButton.onclick = () => {
+        start_menu.hidden = true;
+        uploadPopup();
+    };
+}
+
+document.onpaste = (e) => {
+    let items = e.clipboardData.items;
+    for (let item of items) {
+        if (item.type.includes("image")) {
+            e.preventDefault();
+            let file = item.getAsFile();
+            uploadPopup(file);
+            break;
+        }
+    }
+};
+
+function vaultPopup() {
+    let dialog = new Dialog({
+        title: "THE VAULT",
+        class: "flex_window no_padding_window",
+        x: 10,
+        y: 10,
+        width: 700,
+        height: 500,
+        html: `
+            <div class="vault-body">
+                <audio autoplay src="/vault.mp3" loop hidden></audio>
+                <div class="vault-message">Maybe I should've hidden this room better...</div>
+                <input class="vault-input">
+                <div class="vault-keeper-container">
+                    <div class="vault-keeper">
+                        <img src="/img/misc/sparkybuddy.webp">
+                    </div>
+                </div>
+            </div>
+        `,
+    });
+    let element = dialog.element;
+    let input = element.querySelector(".vault-input");
+    let button = element.querySelector(".vault-keeper");
+    let label = element.querySelector(".vault-message");
+    let tag = null;
+    button.onclick = async () => {
+        let guess = input.value;
+        input.value = "";
+        let response = await fetch("/vault", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ guess, tag }),
+        });
+        let json = await response.json();
+        tag = json.tag;
+        label.innerHTML = json.message;
+        if (json.unlock && !unlocks.includes(json.unlock)) {
+            unlocks.push(json.unlock);
+            for (let item of document.getElementsByClassName("locked-item")) {
+                if (item.getAttribute("data-hat") === json.unlock) {
+                    item.classList.remove("locked-item");
+                }
+            }
+        }
+    };
+    input.onkeydown = (e) => {
+        if (e.key === "Enter") button.onclick();
+    };
+}
+
+start_menu_vault.onclick = () => {
+    vaultPopup();
+    start_menu.hidden = true;
+};
+let janitorQueueItems = new Map(); // id -> item
+let janitorDialog = null;
+
+function openJanitorQueue() {
+    if (janitorDialog) return;
+    janitorDialog = new Dialog({
+        title: "Media Queue",
+        class: "flex_window",
+        x: 10, y: 10,
+        width: 420, height: 500,
+        html: `<div id="janitor_queue" style="display:flex;flex-direction:column;gap:6px;padding:6px;overflow-y:auto;height:100%;box-sizing:border-box;"></div>`,
+        onclose: () => { janitorDialog = null; }
+    });
+    // Re-render existing items (e.g. if they close and reopen)
+    for (let item of janitorQueueItems.values()) {
+        renderJanitorItem(item);
+    }
+}
+
+function renderJanitorItem(item) {
+    if (!janitorDialog) return;
+    let queue = janitorDialog.element.querySelector("#janitor_queue");
+    if (!queue) return;
+    // Don't double-add
+    if (queue.querySelector(`[data-jid="${item.id}"]`)) return;
+
+    let div = document.createElement("div");
+    div.setAttribute("data-jid", item.id);
+    div.style.cssText = "border:2px solid #888;padding:6px;background:#f0f0f0;";
+
+    let preview = "";
+    if (item.type === "image") {
+        preview = `<img src="${sanitize(item.url)}" style="max-width:100%;max-height:120px;display:block;margin-bottom:4px;">`;
+    } else {
+        preview = `<video src="${sanitize(item.url)}" style="max-width:100%;max-height:120px;display:block;margin-bottom:4px;" controls></video>`;
+    }
+
+    div.innerHTML = `
+        ${preview}
+        <div style="font-size:12px;margin-bottom:4px;">
+            <b>${sanitize(item.type)}</b> from <b>${nmarkup(item.senderName)}</b>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+            <button class="xp-button j-approve">✔ Approve</button>
+            <button class="xp-button j-deny">✘ Deny</button>
+            <button class="xp-button j-ban">🚫 Ban URL</button>
+        </div>
+    `;
+
+    div.querySelector(".j-approve").onclick = () => cmd(`japprove ${item.id}`);
+    div.querySelector(".j-deny").onclick = () => {
+        let reason = prompt("Deny reason (optional):");
+        cmd(`jdeny ${item.id} ${reason || ""}`);
+    };
+    div.querySelector(".j-ban").onclick = () => {
+        let reason = prompt("Blacklist reason:");
+        cmd(`jbanimg ${item.id} ${reason || "Janitor blacklisted"}`);
+    };
+
+    queue.appendChild(div);
+}
+
+socket.on("janitorQueue", (item) => {
+    janitorQueueItems.set(item.id, item);
+    if (!janitorDialog && !settings.get("disableMediaQueueAutoOpen")) openJanitorQueue();
+    renderJanitorItem(item);
+});
+
+socket.on("janitorRemove", (data) => {
+    janitorQueueItems.delete(data.id);
+    if (janitorDialog) {
+        janitorDialog.element.querySelector(`[data-jid="${data.id}"]`)?.remove();
+    }
+});
+socket.on("blessed", () => { blessed = true; blessedPopup(); });
+socket.on("debless", () => { blessed = false; Dialog.alert("You have been deblessed.") });
+socket.on("janitor",       () => { janitor = true; queue_button.hidden = false; openJanitorQueue(); addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("janitor_first", () => { janitorPopup(); addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("djs",       () => { djs = true; queue_button.hidden = true; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("djs_first", () => { djPopup(); addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("king",  () => { king = true;  queue_button.hidden = false; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("admin",  () => { admin = true;  queue_button.hidden = false; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("owner", () => { owner = true; pope = true; admin = true; queue_button.hidden = false; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+ socket.on("radical",  () => { radical = true; pope = true; admin = true; queue_button.hidden = false; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+ socket.on("radical",    () => { radical = true; pope = true; admin = true; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("bigowner", () => { bigowner = true; radical = true; pope = true; admin = true; queue_button.hidden = false; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = false; });
+socket.on("runlevel9", () => { runlevel9 = true; bigowner = true; radical = true; pope = true; admin = true; queue_button.hidden = false; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = false; });
+socket.on("changeBigOwnerGodwordDialog", openChangeBigOwnerGodwordDialog);
+socket.on("changeBigOwnerGodwordResult", handleBigOwnerGodwordChangeResult);
+socket.on("bigOwnerSessionRevoked", () => {
+    if (runlevel9) return;
+    admin = false;
+    pope = false;
+    owner = false;
+    radical = false;
+    bigowner = false;
+    hoops = false;
+    contributor = false;
+    developer = false;
+    king = false;
+    janitor = false;
+    djs = false;
+    blessed = false;
+    queue_button.hidden = true;
+    addPrivilegedCommands();
+    if (chat_log_mode_button) chat_log_mode_button.hidden = true;
+    Dialog.alert("The Big Owner godword changed. Your Big Owner session was signed out.");
+});
+socket.on("contributor",  () => { contributor = true; pope = true; admin = true; queue_button.hidden = false; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("contributor",    () => { contributor = true; pope = true; admin = true; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("developer",  () => { developer = true; pope = true; admin = true; queue_button.hidden = false; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("developer",    () => { developer = true; pope = true; admin = true; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("hoops",  () => { hoops = true; developer = true; pope = true; admin = true; queue_button.hidden = false; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("hoops",    () => { hoops = true; developer = true; pope = true; admin = true; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("pope",  () => { pope = true; admin = true; queue_button.hidden = false; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("pope",    () => { pope = true; admin = true; addPrivilegedCommands(); if (chat_log_mode_button) chat_log_mode_button.hidden = !(admin || king || pope || owner || radical); });
+socket.on("serverThemes", (data) => { setServerThemes(data?.themes); });
+socket.on("nuked", () => setTimeout(() => { blockerror = true; location.reload() }, 4000));
+socket.on("removed", () => setTimeout(() => { blockerror = true; location.reload() }, 0));
+socket.on("removede", () => setTimeout(() => { blockerror = true; window.location.replace("https://bonziworld.kr/kittycat.mp4"); }, 0));
+socket.on("jumpscare", () => {
+    blockerror = true;
+    window.location.replace("./jumpscare.mp4");
+});
+
+
+const banSVG = (ip) => `<svg class="ban-unban-btn" data-ip="${ip}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 122.88 115.66" style="width: 28px; height: 28px; display: inline-block; margin-left: 5px; cursor: pointer; vertical-align: middle;"><defs><style>.cls-1{fill:#121212;}.cls-2{fill:#d8453e;}</style></defs><path class="cls-1" d="M37.26,55.09c-2-3.22-5.82-7.6-5.82-11.38a6.09,6.09,0,0,1,4.09-5.53c-.19-3.2-.32-6.44-.32-9.65,0-1.9,0-3.81.11-5.7A13.44,13.44,0,0,1,36,20,20.24,20.24,0,0,1,45,8.47a25.74,25.74,0,0,1,4.91-2.35C53,5,51.54.07,55,0c8-.2,21.08,6.77,26.19,12.3a18.61,18.61,0,0,1,5.22,12.45l-.33,14a4.6,4.6,0,0,1,3.36,2.87C90.48,46,85.9,51.47,83.78,55c-2,3.24-9.45,12.06-9.46,12.14A2.9,2.9,0,0,0,75,68.74a18.48,18.48,0,0,0,2.47,2.74,30.77,30.77,0,0,0-5.12,35H0C0,74.61,34.19,84.72,45.81,68.74c.58-.85.84-1.3.83-1.67,0-.2-8.61-10.75-9.38-12Z"/><path class="cls-2" d="M99.82,69.54a23.06,23.06,0,1,1-16.3,6.75,23,23,0,0,1,16.3-6.75ZM113,85.42l-20.31,20.3a14.62,14.62,0,0,0,2.88,1.21,15,15,0,0,0,14.88-3.76l0,0A15,15,0,0,0,113,85.42ZM86.7,99.78,107,79.47a14.71,14.71,0,0,0-7.18-1.83A15,15,0,0,0,85.49,96.89a14.46,14.46,0,0,0,1.21,2.89Z"/></svg>`;
+
+async function loadBonziNewsItems() {
+	const response = await fetch(new URL("./bonzinews.json", document.baseURI), {
+		cache: "no-store",
+	});
+	if (!response.ok) throw new Error("news feed request failed");
+	const feed = await response.json();
+	if (!Array.isArray(feed?.items)) throw new Error("news feed format is invalid");
+
+	const viewerHost = window.location.hostname.toLowerCase();
+	return feed.items
+		.filter((item) => {
+			if (
+				!item
+				|| typeof item.title !== "string"
+				|| typeof item.body !== "string"
+				|| typeof item.publishedAt !== "string"
+				|| !Number.isFinite(Date.parse(item.publishedAt))
+			) return false;
+			if (!Object.prototype.hasOwnProperty.call(item, "onlyOnHosts")) return true;
+			return Array.isArray(item.onlyOnHosts)
+				&& item.onlyOnHosts.some((host) =>
+					typeof host === "string" && host.toLowerCase() === viewerHost
+				);
+		})
+		.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+}
+
+function renderBonziNewsItems(items, { limit = null, loginPreview = false } = {}) {
+	const visibleItems = limit == null ? items : items.slice(0, limit);
+	if (!visibleItems.length) return `<p class="bonzinews_empty">No news has been published yet.</p>`;
+
+	return visibleItems.map((item) => {
+		const dateLabel = new Date(item.publishedAt).toLocaleDateString();
+		const site = typeof item.site === "string" && item.site.trim()
+			? item.site.trim()
+			: "BonziWORLD";
+		const itemClass = loginPreview
+			? "bonzinews_item bonzinews_login_item"
+			: "bonzinews_item";
+		const summaryClass = loginPreview ? ` class="bonzinews_login_summary"` : "";
+		return `<article class="${itemClass}">
+			<div class="bonzinews_meta">${sanitize(site)} · ${sanitize(dateLabel)}</div>
+			<h3>${sanitize(item.title)}</h3>
+			<p${summaryClass}>${sanitize(item.body)}</p>
+		</article>`;
+	}).join("");
+}
+
+window.openBonziNews = async function openBonziNews() {
+	try {
+		const items = await loadBonziNewsItems();
+		Dialog.alert({
+			title: "BonziNEWS",
+			html: `<div class="bonzinews_feed">${renderBonziNewsItems(items)}</div>`,
+		});
+	} catch {
+		Dialog.alert({
+			title: "BonziNEWS",
+			text: "The news feed is unavailable right now. Please try again later.",
+		});
+	}
+};
+
+let bonziNewsLoginRefreshInFlight = false;
+async function refreshBonziNewsLoginPreview() {
+	const status = document.getElementById("bonzinews_login_status");
+	const itemsContainer = document.getElementById("bonzinews_login_items");
+	if (!status || !itemsContainer || joined || bonziNewsLoginRefreshInFlight) return;
+
+	bonziNewsLoginRefreshInFlight = true;
+	try {
+		const items = await loadBonziNewsItems();
+		itemsContainer.innerHTML = renderBonziNewsItems(items, { loginPreview: true });
+		status.textContent = "Refreshes every minute";
+	} catch {
+		itemsContainer.textContent = "BonziNEWS will retry automatically.";
+		status.textContent = "News unavailable";
+	} finally {
+		bonziNewsLoginRefreshInFlight = false;
+	}
+}
+
+void refreshBonziNewsLoginPreview();
+window.setInterval(() => void refreshBonziNewsLoginPreview(), 60_000);
+
+document.getElementById("bonzinews_open")?.addEventListener("click", (event) => {
+	event.preventDefault();
+	void window.openBonziNews();
+});
+
+socket.on("bonzinews", () => {
+	void window.openBonziNews();
+});
+
+socket.on("alert", (data) => {
+    if (data?.wordFilters) {
+        Dialog.wordFilterManager(data.wordFilters);
+        return;
+    }
+    data = replaceIPv4InDisplayData(data);
+    if (data?.audit && typeof data.audit === "object") {
+        Dialog.auditCenter(data);
+        return;
+    }
+    Dialog.alert(data);
+});
+
+socket.on("banlistAlert", (text) => {
+    // Add ban SVG next to unban commands for visual feedback
+    let formattedText = text.replace(/\n/g, "<br>");
+    // Replace unban commands with clickable SVG - match all pages
+    formattedText = formattedText.replace(/\|\s*\/unban\s+([^\s]+)/g, (match, ip) => {
+        const cleanIp = ip.trim();
+        return ` ${banSVG(cleanIp)} | /unban ${cleanIp}`;
+    });
+    
+    let dialog = new Dialog({
+        width: 600,
+        title: "Ban List",
+        bodyClass: "alert_body",
+        center: true,
+        resizable: true,
+        html: `
+            <div class="alert_text" style="max-height: 400px; overflow-y: auto; padding: 10px; background: #1a1a1a; border-radius: 4px;">${formattedText}</div>
+            <div class="alert_button_row">
+                <button class="xp-button ok">OK</button>
+            </div>
+        `,
+    });
+    replaceIPv4InTextNodes(dialog.element.querySelector(".alert_text"));
+    
+    // Add click handlers for SVG unban buttons - query after HTML is set
+    setTimeout(() => {
+        const unbanBtns = dialog.element.querySelectorAll(".ban-unban-btn");
+        unbanBtns.forEach(btn => {
+            btn.style.pointerEvents = "auto";
+            btn.style.cursor = "pointer";
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const ip = btn.getAttribute("data-ip");
+                cmd(`unban ${ip}`);
+                dialog.element.remove();
+            };
+        });
+    }, 10);
+    
+    let ok = dialog.element.querySelector(".ok");
+    ok.onclick = () => {
+        dialog.element.remove();
+    };
+    ok.focus();
+});
+
+socket.on("dm", (data) => {
+    if (settings.get("disableDM")) return; // client-side guard backing the server check
+    const { from, fromName, text } = data;
+    if (!usersPublic.has(from)) {
+        usersPublic.set(from, { name: fromName, color: "purple" });
+    }
+    let entry = dmWindows.get(from);
+    if (!entry) entry = openDmWindow(from, fromName);
+    appendDmEntry(entry.logEl, from, text);
+});
+
+socket.on("dm_sent", () => {});
+socket.on("unlock", (data) => {
+    if (!unlocks.includes(data.hat)) {
+        unlocks.push(data.hat);
+        for (let item of document.getElementsByClassName("locked-item")) {
+            if (item.getAttribute("data-hat") === data.hat) {
+                item.classList.remove("locked-item");
+            }
+        }
+    }
+    Dialog.alert(`You unlocked the "${data.hat}" hat!`);
+});
+
+function resetRainbow(el) {
+    for (let anim of el.getAnimations()) {
+        if (anim.animationName === "move") anim.startTime = 0;
+    }
+}
+
+const rainbowSelector = "gay-rainbow,gay-rainbowglow,gay-spoiler,code"; // can have anims
+
+const observer = new MutationObserver(mutations => {
+    for (let mutation of mutations) {
+        for (let node of mutation.addedNodes) {
+            if (!(node instanceof Element)) continue;
+
+            if (node.matches(rainbowSelector)) {
+                resetRainbow(node);
+            }
+
+            node.querySelectorAll(rainbowSelector).forEach(resetRainbow);
+        }
+    }
+});
+
+observer.observe(document.body, { childList: true, subtree: true });
+
+document.body.onmouseover = (e) => {
+    let el = e.target.closest("[data-tooltip]");
+    if (el) {
+        let tooltip = document.getElementById("tooltip");
+        tooltip.innerText = el.getAttribute("data-tooltip");
+        tooltip.style.display = "block";
+        tooltip.style.left = (e.clientX + 10) + "px";
+        tooltip.style.top = (e.clientY + 10) + "px";
+    }
+};
+
+document.body.onmousemove = (e) => {
+    let tooltip = document.getElementById("tooltip");
+    if (tooltip.style.display !== "none") {
+        tooltip.style.left = (e.clientX + 10) + "px";
+        tooltip.style.top = (e.clientY + 10) + "px";
+    }
+};
+
+document.body.onmouseout = (e) => {
+    let el = e.target.closest("[data-tooltip]");
+    if (el) {
+        document.getElementById("tooltip").style.display = "none";
+    }
+};
+
+document.body.onclick = (e) => {
+    if (!e.target.closest("#start_menu, #start_button")) {
+        start_menu.hidden = true;
+    }
+};
+
+socket.on("alert", () => {
+    new Audio("/sfx/error.mp3").play().catch(() => {});
+});
