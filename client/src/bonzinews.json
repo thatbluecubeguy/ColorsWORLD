@@ -1,0 +1,28 @@
+{
+  "items": [
+    {
+      "id": "bonzinews-replit-hardban",
+      "publishedAt": "2026-09-26T16:10:00.000Z",
+      "site": "This Replit server",
+      "title": "Hardbans remain active until staff remove them",
+      "body": "Staff-issued hardbans on this server disconnect affected users and reject matching reconnects until a staff member removes the ban. This item is limited to this Replit host.",
+      "onlyOnHosts": [
+        "09f75907-fa2a-4b05-b4c2-47c05bc57fb0-00-f9uz13geq167.kira.replit.dev"
+      ]
+    },
+    {
+      "id": "bonzinews-database-reset",
+      "publishedAt": "2026-09-26T16:00:00.000Z",
+      "site": "bonziworld.kr and this Replit server",
+      "title": "Database reset behavior depends on the service",
+      "body": "In the BonziWORLD.kr/Replit code here, /resetdatabase requires a second confirmation within 60 seconds, creates a backup snapshot, clears application data including hardban and moderation records, then restarts the server. Reconnecting users can quickly create fresh records. This command does not call a reset operation on bonzi.app or bwiworld-production-up.railway.app; their reset procedures and data-sharing setup could not be verified from this workspace."
+    },
+    {
+      "id": "bonzinews-launch",
+      "publishedAt": "2026-09-26T00:00:00.000Z",
+      "site": "BonziWORLD network",
+      "title": "BonziNEWS is live",
+      "body": "This feed will carry updates for bonziworld.kr, bonzi.app, bwiworld-production-up.railway.app, and other BonziWORLD services. Godword and Kingword announcements can identify the affected service, but the secret word itself is never published."
+    }
+  ]
+}
