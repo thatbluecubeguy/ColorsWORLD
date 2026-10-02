@@ -1,0 +1,5415 @@
+import * as Utils from "./utils.js";
+import { readFileSync, writeFileSync } from "fs";
+import { io, app } from "./app.js";
+import settings from "./settings.json" with { type: "json" };
+import vaultCodes from "./vault.json" with { type: "json" };
+import express from "express";
+import * as db from "./database.js";
+import z from "zod";
+import { toggleServerTheme } from "./serverThemes.js";
+import crypto from "crypto";
+import { createHash } from "node:crypto";
+import { canonicalizeIp, isCloudflare, isLocal, parseIp, makeCidrMatcher } from "./iputil.js";
+import { getPublicRankFlags } from "./rankIcons.js";
+import { parseRedirectUrl } from "./redirect.js";
+import {
+BAN_DURATIONS_MS,
+MUTE_DURATION_MS,
+moderationMinimumRunlevel,
+parseModerationRequest,
+} from "./moderation.js";
+import net from 'net';
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnRestartChild } from "./restart.js";
+import {
+	loadServerEnv,
+	permanentPromotionAlertUrl,
+	restoredSafetyAlertUrl,
+} from "./env.js";
+import {
+	DEFAULT_CINEMA_VIDEO_IDS,
+	MAX_CINEMA_VIDEO_COUNT,
+	normalizeCinemaVideoIds,
+} from "./cinemaVideos.js";
+import {
+	createSafetyActivationCommandHandlers,
+	restoreSafetyAtStartup,
+	sendPermanentPromotionFailureAlert,
+} from "./restoredSafetyAlert.js";
+import {
+	canRunServerManagementCommand,
+	createCooldownStorageDiagnosticReporter,
+	createGodmodeCommandHandlers,
+	createLiveCooldownCoordinationHealth,
+	createPermanentPromotionFailureReporter,
+	createServerStatusCommandHandler,
+	dispatchUserCommandHandler,
+	formatCommandLog,
+parseMassBanRequest,
+parseMassDemoteRequest,
+parseMassRemoveRequest,
+	resolveUserCommandHandler,
+	ResetConfirmationGate,
+	restorePermanentPromotionAlertCooldown,
+	routeRestoredSafetyLogin,
+selectMassDemoteTargets,
+selectMassBanTargets,
+selectMassRemoveTargets,
+	restoredSafetyStartupMessage,
+	SERVER_MANAGEMENT_COMMANDS,
+	validateUserCommandTable,
+} from "./ownerSafety.js";
+import {
+	applyMassAppearanceEdit,
+	MASS_APPEARANCE_EDIT_COMMANDS,
+	parseMassAppearanceEditRequest,
+} from "./massAppearanceEdits.js";
+import {
+	createWordFilterStore,
+	WORD_FILTER_CATEGORIES,
+} from "./wordFilters.js";
+import { buildGodmodeTrackerPage } from "./godmodeTracker.js";
+import {
+	addAsnBan,
+	getAsnBanForIp,
+	listAsnBans,
+	normalizeAsn,
+	removeAsnBan,
+} from "./asnbans.js";
+import { replaceIPv4Addresses } from "./ipv4Privacy.js";
+import {
+	fetchYouTubeVideoTitle,
+	matchByoutubeTitleRegex,
+	normalizeByoutubeTitleRegex,
+} from "./byoutubeTitleRegex.js";
+import { runMassInjectCommand, runXssCommand } from "./xssCommand.js";
+import { CoordinatedFloodGuard } from "./antiFlood.js";
+import { ConnectionAdmissionGuard } from "./connectionAdmission.js";
+
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+let cinemaVideoRotation = [...DEFAULT_CINEMA_VIDEO_IDS];
+let cinemaVideoIndex = 0;
+let cinemaPlaybackGeneration = 0;
+const BYOUTUBE_BLOCKED_REPLACEMENT_ID = "rDKSQC2lw5o";
+const LEGACY_BLOCKED_BYOUTUBE_IDS = new Set(["7LCttpRepzE", "Zol-ohjv0Co"]);
+
+function getCinemaVideoRotationState() {
+	return {
+		videos: [...cinemaVideoRotation],
+		index: cinemaVideoIndex,
+		generation: cinemaPlaybackGeneration,
+	};
+}
+const joke2Jokes = JSON.parse(readFileSync(path.resolve(__dirname, "..", "client", "src", "joke2.json"), "utf8"));
+const fact2Facts = JSON.parse(readFileSync(path.resolve(__dirname, "..", "client", "src", "fact2.json"), "utf8"));
+const wtfQuotes = [
+	"i said /godmode password and it didnt work",
+	"please make pope free",
+	"100. Continue.",
+	"418. I'm a teapot.",
+	"i installed BonziBUDDY on my pc and now i have a virus",
+	"i deleted system32",
+	"i flood servers, and that makes me cool.",
+	"i still use the Wii U",
+	"i bricked my Wii",
+	"i copy other people's usernames",
+	"CAN U PLZ UNBAN ME PLZ PLZ PLZ PLZ PLZ PLZ PLZ",
+	"i am so cool. i shit on people, add reactions that make fun of users on discord, and abuse my admin powers.",
+	"how to make a bonziworld server?",
+	"no u",
+	"Sorry, i don't want you anymore.",
+	"I am getting fucking tired of you using this command. Fucking take a break already!",
+	"DeviantArt",
+	"javascript",
+	"moo!",
+	"Hi.",
+	"i watch numberblocks",
+	"i used inspect element to change your name so i can bully you",
+	"i can ban you, my dad is seamus",
+	"i like to imagine that i am getting so fat for no reason at all",
+	"i used grounded threats and now i got hate",
+	"i watch nature on PBS",
+	"i pee my pants",
+	"Fun Fact: You're a fucking asshole",
+	"Do you know how much /wtf quotes there are?",
+	"Yeah, of course {NAME} wants me to use /wtf. Hah hah! Look at the stupid {COLOR} Microsoft Agent character embarrassing himself! Fuck you. It isn't funny.",
+	"Damn, {NAME} really likes /wtf",
+];
+
+app.use(express.json());
+
+function sha256(str) {
+    return createHash("sha256").update(String(str ?? ""), "utf8").digest("hex");
+}
+
+function configuredSecretHash(value) {
+    const configured = String(value ?? "").trim();
+    return /^[a-f0-9]{64}$/i.test(configured)
+        ? configured.toLowerCase()
+        : sha256(configured);
+}
+
+async function setCloudflareSecurityLevel(value) {
+    if (!process.env.CLOUDFLARE_ZONE || !process.env.CLOUDFLARE_KEY) {
+        throw new Error("Cloudflare credentials not configured.");
+    }
+
+    await fetch(`https://api.cloudflare.com/client/v4/zones/${process.env.CLOUDFLARE_ZONE}/settings/security_level`, {
+        method: "PATCH",
+        headers: {
+            "Authorization": `Bearer ${process.env.CLOUDFLARE_KEY}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ value })
+    });
+}
+
+loadServerEnv(__dirname);
+
+// Extra trusted reverse proxies, configurable via env (comma-separated CIDRs).
+const isExtraTrustedProxy = makeCidrMatcher(
+	(process.env.TRUSTED_PROXIES || "").split(",").map((s) => s.trim()).filter(Boolean)
+);
+
+function isTrustedProxy(addr) {
+	return isLocal(addr) || isCloudflare(addr) || isExtraTrustedProxy(addr);
+}
+
+let higherKings = sha256(process.env.HIGHER_KINGS);
+let lowerKings = sha256(process.env.LOWER_KINGS);
+let janitors = sha256(process.env.JANNYWORD);
+let djs = sha256(process.env.DJWORD);
+let popewords = sha256(process.env.GODWORD);
+let developers = sha256(process.env.DEVELOPER);
+let contributors = sha256(process.env.CONTRIBUTOR);
+// Normal Owners are granted only through Big Owner promotion. This marker
+// restores that persisted role but is deliberately not accepted by /godmode.
+const ownerRankWord = sha256("bonziworld:persisted-owner:v1");
+const radicalRankWord = sha256("bonziworld:persisted-radical:v1");
+let bigOwnerWord = process.env.BIG_OWNER_GODWORD
+	? configuredSecretHash(process.env.BIG_OWNER_GODWORD)
+	: null;
+function makeBigOwnerRankWord(wordHash) {
+	return wordHash ? sha256(`bonziworld:persisted-big-owner:v1:${wordHash}`) : null;
+}
+let bigOwnerRankWord = makeBigOwnerRankWord(bigOwnerWord);
+const configuredRunlevel9Word = process.env.RUNLEVEL9_GODWORD
+    ? configuredSecretHash(process.env.RUNLEVEL9_GODWORD)
+    : null;
+function resolveRunlevel9Word() {
+	const existingRankWords = new Set([
+		janitors,
+		djs,
+		lowerKings,
+		higherKings,
+		popewords,
+		contributors,
+		developers,
+		radicalRankWord,
+		ownerRankWord,
+		bigOwnerWord,
+		bigOwnerRankWord,
+	].filter(Boolean));
+	return configuredRunlevel9Word && !existingRankWords.has(configuredRunlevel9Word)
+		? configuredRunlevel9Word
+		: null;
+}
+let runlevel9Word = resolveRunlevel9Word();
+if (configuredRunlevel9Word && !runlevel9Word) {
+    console.error("RUNLEVEL9_GODWORD conflicts with another configured role; Runlevel 9 is disabled.");
+}
+const godmodeAllowedHashes = [];
+function refreshGodmodeAllowedHashes() {
+	godmodeAllowedHashes.splice(
+		0,
+		godmodeAllowedHashes.length,
+		...[bigOwnerWord, runlevel9Word].filter(Boolean),
+	);
+}
+function applyEffectiveBigOwnerWordHash(wordHash) {
+	bigOwnerWord = wordHash || null;
+	bigOwnerRankWord = makeBigOwnerRankWord(bigOwnerWord);
+	runlevel9Word = resolveRunlevel9Word();
+	refreshGodmodeAllowedHashes();
+}
+refreshGodmodeAllowedHashes();
+
+async function restoreBigOwnerGodwordOverride() {
+	const storedHash = await db.getBigOwnerGodwordOverride();
+	if (!storedHash) return;
+
+	const wordHash = String(storedHash).toLowerCase();
+	const rankHash = makeBigOwnerRankWord(wordHash);
+	if (!/^[a-f0-9]{64}$/.test(wordHash)
+		|| (configuredRunlevel9Word && (
+			wordHash === configuredRunlevel9Word
+			|| rankHash === configuredRunlevel9Word
+		))) {
+		console.error("Stored Big Owner credential override is invalid or conflicts with Runlevel 9; using the configured credential.");
+		return;
+	}
+
+	applyEffectiveBigOwnerWordHash(wordHash);
+	if (configuredRunlevel9Word && !runlevel9Word) {
+		console.error("RUNLEVEL9_GODWORD conflicts with another configured role; Runlevel 9 is disabled.");
+	}
+}
+
+function persistedRankTag(storedHash) {
+if (runlevel9Word && storedHash === runlevel9Word) return "Runlevel 9";
+if (storedHash === bigOwnerRankWord) return "Big Owner";
+	if (storedHash === janitors) return "Janitor";
+	if (storedHash === djs) return "DJ";
+	if (storedHash === lowerKings) return "Low King";
+	if (storedHash === higherKings) return "High King";
+	if (storedHash === popewords) return "Pope";
+	if (storedHash === contributors) return "Contributor";
+	if (storedHash === developers) return "Developer";
+	if (storedHash === radicalRankWord) return "Radical";
+	if (storedHash === ownerRankWord) return "Owner";
+	if (bigOwnerWord && storedHash === bigOwnerWord) return "Big Owner";
+	return "";
+}
+
+let pendingMedia = new Map(); // msgid -> { type, url, guid, room, user, msgid }
+let maintenanceMode = false;
+let emergencyLockdown = false;
+let shutdownMode = false;
+let serverThemes = [];
+const resetConfirmations = new ResetConfirmationGate();
+let tempBans = new Map();
+const mutedIps = new Map();
+const shadowbannedIps = new Map();
+
+function toggleServerWideTheme(actor, theme) {
+	serverThemes = toggleServerTheme(serverThemes, theme);
+	const enabled = serverThemes.includes(theme);
+	io.emit("serverThemes", { themes: [...serverThemes] });
+	actor.notify(`Server-wide ${theme} theme is now ${enabled ? "ON" : "OFF"} for every room.`);
+}
+
+export function isShutdownModeEnabled() {
+	return shutdownMode;
+}
+
+export function getSafetyModeState() {
+	return {
+		maintenance: maintenanceMode,
+		emergencyLockdown,
+		shutdown: shutdownMode,
+	};
+}
+
+export async function hasPersistentRunlevel9Cookie(cookie) {
+if (!cookie || !runlevel9Word) return false;
+	try {
+		const stored = await db.getGodword(db.normalizeCookieKey(cookie));
+		if (!stored) return false;
+		const storedHash = /^[a-f0-9]{64}$/i.test(String(stored))
+			? String(stored).toLowerCase()
+			: sha256(stored);
+return storedHash === runlevel9Word;
+	} catch (error) {
+		console.error("Runlevel 9 HTTP authentication:", error?.message || error);
+		return false;
+	}
+}
+
+function normalizeIp(ip) {
+	if (typeof ip !== "string") return "";
+	let s = ip.trim();
+	if (!s) return "";
+	return canonicalizeIp(s) || s.toLowerCase();
+}
+
+// Keep real network addresses available to the server's abuse-prevention
+// checks, but expose only a stable pseudonymous identifier to admin views and
+// integrations. This is deliberately not IP spoofing: it does not alter the
+// address used by the operating system or any upstream proxy.
+let _ipMaskKey = null;
+function ipMaskKey() {
+	if (_ipMaskKey) return _ipMaskKey;
+	// Reuse the existing server-session key rather than maintaining a separate
+	// IP-mask password. The domain separator prevents cross-protocol key reuse.
+	const sessionSecret = String(process.env.SESSION_SECRET || "");
+	_ipMaskKey = createHash("sha256")
+		.update(`bonziworld-ip-mask:v1:${sessionSecret}`)
+		.digest();
+	return _ipMaskKey;
+}
+
+function randomizedIp(ip) {
+const normalized = normalizeIp(ip);
+if (!normalized) return "anon:unknown";
+if (process.env.RANDOMIZE_IPS === "false") return normalized;
+const digest = crypto.createHmac("sha256", ipMaskKey()).update(normalized).digest("hex");
+return `anon:${digest.slice(0, 32)}`;
+}
+
+function socketCookie(socket, name) {
+	const header = String(socket?.handshake?.headers?.cookie || "");
+	for (const part of header.split(";")) {
+		const separator = part.indexOf("=");
+		if (separator === -1) continue;
+		const key = part.slice(0, separator).trim();
+		if (key === name) return part.slice(separator + 1).trim();
+	}
+	return "";
+}
+
+function hardbanFingerprint(cookie) {
+	if (!cookie) return "";
+	return crypto.createHmac("sha256", ipMaskKey())
+		.update(`hardban:${cookie}`)
+		.digest("hex");
+}
+
+function extractForwardedIp(headers) {
+	const candidates = [];
+	for (const key of ["cf-connecting-ip", "x-real-ip", "true-client-ip", "x-forwarded-for"]) {
+		const value = headers[key];
+		if (typeof value === "string") {
+			candidates.push(...value.split(","));
+		}
+	}
+	const forwarded = headers.forwarded;
+	if (typeof forwarded === "string") {
+		for (const part of forwarded.split(",")) {
+			const match = part.match(/for=(?:"?)([^;,"]+)(?:"?)/i);
+			if (match) candidates.push(match[1]);
+		}
+	}
+	for (const raw of candidates) {
+		const cleaned = raw.trim().replace(/^\[|\]$/g, "").replace(/:\d+$/, "");
+		if (parseIp(cleaned)) return normalizeIp(cleaned);
+	}
+	return null;
+}
+
+export function socketIp(socket) {
+	const peer = socket.handshake.address;
+	const normalizedPeer = normalizeIp(peer);
+	if (process.env.USE_X_REAL_IP === "false") return normalizedPeer;
+	// Only believe forwarding headers when the actual TCP peer is a trusted
+	// proxy (Cloudflare / loopback / configured). Otherwise a client connecting
+	// directly could spoof forwarded headers to evade bans and rate limits or
+	// frame another IP.
+	if (isTrustedProxy(peer)) {
+		const forwarded = extractForwardedIp(socket.handshake.headers);
+		if (forwarded) return forwarded;
+	}
+	return normalizedPeer;
+}
+
+const CONNECTION_FLOOD_OPTIONS = Object.freeze({
+	windowMs: 10_000,
+	maxScore: 6,
+	strikeWindowMs: 5 * 60_000,
+	blockDurationsMs: [10_000, 30_000],
+	banAfterStrikes: 3,
+	banMs: 5 * 60_000,
+});
+const MAX_SOCKETS_PER_IP = 4;
+let lastConnectionFloodStorageWarningAt = 0;
+const connectionFloodGuard = new CoordinatedFloodGuard({
+	guardOptions: CONNECTION_FLOOD_OPTIONS,
+	coordinate: (ip, events) =>
+		db.coordinateFloodEvents("connection", ip, events, CONNECTION_FLOOD_OPTIONS),
+	onSharedError: (_ip, error) => {
+		const now = Date.now();
+		if (now - lastConnectionFloodStorageWarningAt < 60_000) return;
+		lastConnectionFloodStorageWarningAt = now;
+		console.warn(
+			"[anti-flood] shared connection coordination failed; local limits remain active:",
+			error?.message || error,
+		);
+	},
+});
+const connectionAdmissionGuard = new ConnectionAdmissionGuard({
+	rateGuard: connectionFloodGuard,
+	maxConnectionsPerIp: MAX_SOCKETS_PER_IP,
+});
+let connectionFloodGuardInstalled = false;
+
+function connectionFloodMiddleware(socket, next) {
+	const ip = socketIp(socket);
+	const now = Date.now();
+	if (!ip) return next(new Error("unable to identify client address"));
+
+	// Keep the regular ban page available to banned users. The login lifecycle
+	// will send the existing ban event and disconnect them.
+	if (bans.has(ip)) return next();
+	const activeTempBan = tempBans.get(ip);
+	if (activeTempBan?.end > now) return next();
+	if (activeTempBan) tempBans.delete(ip);
+
+	const admission = connectionAdmissionGuard.admit(ip, now);
+	if (admission.action === "ban") {
+		const ban = {
+			reason: "Automatic connection flood block",
+			end: now + admission.banMs,
+		};
+		tempBans.set(ip, ban);
+		setTimeout(() => {
+			if (tempBans.get(ip) === ban) tempBans.delete(ip);
+		}, admission.banMs).unref?.();
+		console.warn(
+			`[anti-flood] temporarily blocked ${randomizedIp(ip)} after repeated connection bursts`,
+		);
+		return next(new Error("temporarily blocked"));
+	}
+	if (admission.action !== "allow") {
+		return next(new Error(
+			admission.action === "connection_limit"
+				? "too many connections"
+				: "connection rate limited",
+		));
+	}
+
+	socket.once("disconnect", admission.release);
+	next();
+}
+
+function installConnectionFloodGuard() {
+	if (connectionFloodGuardInstalled) return;
+	connectionFloodGuardInstalled = true;
+	db.startAntiFloodCleanupScheduler({ scopes: ["connection"] });
+	io.use(connectionFloodMiddleware);
+}
+
+function requestNetworkIp(req) {
+	const peer = normalizeIp(req.socket?.remoteAddress || "");
+	if (process.env.USE_X_REAL_IP !== "false" && isTrustedProxy(peer)) {
+		const forwarded = extractForwardedIp(req.headers);
+		if (forwarded) return forwarded;
+	}
+	return peer;
+}
+
+function godwordRunlevel(godword) {
+    const hashed = /^[a-f0-9]{64}$/i.test(String(godword))
+        ? String(godword).toLowerCase()
+        : sha256(godword);
+    if (runlevel9Word && hashed === runlevel9Word) return 9;
+    if (hashed === bigOwnerRankWord) return 8;
+    if (hashed === janitors) return 1.05;
+    if (hashed === lowerKings) return 2;
+    if (hashed === higherKings) return 3;
+    if (hashed === djs) return 1.75;
+    if (hashed === popewords) return 4;
+    if (hashed === contributors) return 5;
+    if (hashed === developers) return 6;
+    if (hashed === radicalRankWord) return 7.5;
+    if (hashed === ownerRankWord) return 7;
+    if (bigOwnerWord && hashed === bigOwnerWord) return 8;
+    return 0;
+}
+
+
+app.post("/vault", express.json(), async (req, res) => {
+	let cookie = req.cookie.token;
+	if (!cookie) {
+		res.json({ error: "Invalid cookie" });
+		return;
+	}
+	let vaultSchema = z.object({ 
+		tag: z.string().nullish(), 
+		guess: z.string(),
+	});
+	let vaultBody = vaultSchema.safeParse(req.body);
+	if (!vaultBody.success) {
+		res.json({ error: "Invalid request body" });
+		return;
+	}
+	const { tag, guess } = vaultBody.data;
+	for (let code of vaultCodes.codes) {
+		if (code.tag == null || code.tag === tag) {
+			if (code.matches == null || new RegExp(code.matches, "i").test(guess)) {
+				if (code.unlocks) {
+					await db.unlockHat(cookie, code.unlocks);
+				}
+				let response = typeof code.response === "string" ? { text: code.response } : code.response;
+				res.json({
+					message: response.text,
+					tag: "tag" in response ? response.tag : null,
+					unlock: code.unlocks ?? null,
+				});
+				return;
+			}
+		}
+	}
+	let randomResponse = vaultCodes.randomDialog[Math.floor(Math.random() * vaultCodes.randomDialog.length)];
+	res.json({
+		message: typeof randomResponse === "string" ? randomResponse : randomResponse.text,
+		tag: typeof randomResponse === "string" ? null : randomResponse.tag,
+	});
+	return;
+});
+
+const wordFilterStore = createWordFilterStore({
+	defaults: {
+		filters: settings.filters || {},
+		namefilters: settings.namefilters || {},
+		antigodwordleak: settings.antigodwordleak || {},
+	},
+	filePath: path.resolve(__dirname, "managed-word-filters.json"),
+	onInvalidPattern({ category, pattern, error }) {
+		console.error(
+			`censor: skipping invalid ${category} filter ${JSON.stringify(pattern)}: ${error.message}`,
+		);
+	},
+});
+
+const compiledWordFilters = wordFilterStore.getCompiled();
+let filters = compiledWordFilters.messages;
+let filterse = compiledWordFilters.usernames;
+let filtersa = compiledWordFilters.godword;
+
+function censor(txt) {
+	if (typeof txt !== "string") return txt;
+	for (let filter of filters) {
+		txt = txt.replace(filter.regex, filter.replacement);
+	}
+	return txt;
+}
+function censore(txt) {
+	if (typeof txt !== "string") return txt;
+	for (let filtere of filterse) {
+		txt = txt.replace(filtere.regex, filtere.replacement);
+	}
+	return txt;
+}
+
+function antileak(txt) {
+	if (typeof txt !== "string") return txt;
+	for (let filtera of filtersa) {
+		txt = txt.replace(filtera.regex, filtera.replacement);
+	}
+	return txt;
+}
+
+function wordFilterManagerData(category, notice = "") {
+	return {
+		...wordFilterStore.getCategory(category),
+		categories: WORD_FILTER_CATEGORIES.map(({ id, label }) => ({ id, label })),
+		notice,
+	};
+}
+
+let rooms = new Map();
+let banishEnabled = true;
+
+function setBanishEnabled(actor, enabled) {
+	banishEnabled = enabled;
+	const state = enabled ? "enabled" : "disabled";
+	for (const room of rooms.values()) {
+		room.emit("alert", {
+			title: "Server announcement",
+			text: `/banish has been ${state}.`,
+		});
+		room.emit("ranklog", { text: `${actor.public.name} ${state} /banish.` });
+	}
+}
+
+
+export async function beat() {
+	await restoreBigOwnerGodwordOverride();
+	cinemaVideoRotation = await db.getCinemaVideoRotation();
+	cinemaVideoIndex = 0;
+	const alertDestination = restoredSafetyAlertUrl();
+	await restoreSafetyAtStartup({
+		loadState: () => db.loadServerSafetyState(),
+		applyState: safetyState => {
+			maintenanceMode = safetyState.maintenance;
+			emergencyLockdown = safetyState.emergencyLockdown;
+				shutdownMode = safetyState.shutdown;
+		},
+		destination: alertDestination,
+		onRestored: safetyState => {
+			console.warn(restoredSafetyStartupMessage(safetyState));
+			if (process.env.RESTORED_SAFETY_ALERT_URL && !alertDestination) {
+				console.error("[SAFETY] Restored-protection alert destination is invalid; startup will continue.");
+			}
+		},
+	});
+	await loadPersistedBans();
+	await loadModerationSanctions();
+	installConnectionFloodGuard();
+	io.on('connection', function (socket) {
+		let q = 0;
+
+		let onevent = socket.onevent;
+		socket.onevent = function (packet) {
+			let args = packet.data || [];
+			onevent.call(this, packet);
+			packet.data = ["*"].concat(args);
+			onevent.call(this, packet);
+		};
+		socket.on("*", (event) => {
+			if (event === "move") return;
+			if (q > 45) {
+				socket.disconnect();
+			}
+			q++;
+			setTimeout(() => {
+				q--;
+			}, 1000);
+		});
+		User.init(socket);
+	});
+};
+
+function checkRoomEmpty(room) {
+	if (room.users.length !== 0) return;
+
+	room.deconstruct();
+	rooms.delete(room.id);
+}
+
+function webhook(name, msg, color) {
+	msg = msg.replaceAll("@", "#");
+	msg = msg.replace(/(https?:\/\/)?[a-z0-9]{9,}.onion\/?\S*/gi, "(blocked, child porn)");
+	msg = msg.replace(/https?:\/\/\S*/gi, "(blocked, link)");
+	msg = msg.replace(/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/g, "(blocked, ip)");
+	let payload = {
+		username: name,
+		avatar_url: `https://bonzi.gay/discord_pfp/${color.replaceAll(" ", "+")}.png`,
+		content: msg,
+	};
+	fetch(process.env.DISCORD_WEBHOOK, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(payload)        
+	}).catch(() => {});
+}
+
+class Room {
+	constructor(roomId) {
+		this.id = roomId;
+		this.users = [];
+	        this.youtubeState = {
+			vid: "",
+			list: "",
+			video: "",
+			startedAt: 0,
+			censored: false,
+			speed: 1,
+			gen: 0
+		};
+        this.spotifyState = { track: "" };
+        this.backgroundImage = "";
+		this.bimageLocked = false;
+		this.youtubeGen = 0;
+		this.bonziTvIdentTurn = false;
+		this.byoutubeLocked = false;
+	}
+
+	deconstruct() {
+		this.users.forEach((user) => {
+			user.disconnect();
+		});
+	}
+
+	join(user) {
+		user.socket.join("#" + this.id);
+		this.users.push(user);
+		this.updateUser(user);
+	}
+
+	leave(user) {
+		let userIndex = this.users.indexOf(user);
+		if (userIndex == -1) return;
+		this.users.splice(userIndex, 1);
+		checkRoomEmpty(this);
+	}
+
+	updateUser(user) {
+		this.emit('update', {
+			guid: user.guid,
+			userPublic: user.public,
+		});
+	}
+
+	getUsersPublic() {
+		let usersPublic = {};
+		this.users.forEach((user) => {
+			usersPublic[user.guid] = user.public;
+		});
+		return usersPublic;
+	}
+
+	emit(cmd, data) {
+		io.to("#" + this.id).emit(cmd, data);
+	}
+
+	findUser(guid) {
+		let user = this.users.find(u => u.guid === guid);
+		return user ?? null;
+	}
+}
+
+function newRoom(rid) {
+	let room = new Room(rid);
+	rooms.set(rid, room);
+	return room;
+}
+
+let poolId = 1;
+let whitelist = ["bonziworld.kr", "file.garden", "imgur.com", "imgflip.com", "uguu.se", "imagebam.com", "pixhost.cc", "ibb.co", "directupload.eu", "tenor.com", "upload.bonziworld.kr", "klipy.com", "09f75907-fa2a-4b05-b4c2-47c05bc57fb0-00-f9uz13geq167.kira.replit.dev", "bonziupload.pxxlspace.cv"];
+// Exact host or a real subdomain of a whitelisted domain. Plain endsWith() is
+// unsafe: "evilcatbox.moe" ends with "catbox.moe".
+function hostAllowed(host) {
+	host = String(host).toLowerCase();
+	return whitelist.some((d) => host === d || host.endsWith("." + d));
+}
+
+
+function notifyJanitors(item) {
+    for (let user of listUsers()) {
+        if (user.runlevel >= 1.05) {
+            user.socket.emit("janitorQueue", item);
+        }
+    }
+}
+function findUser(guid) {
+	for (let room of rooms.values()) {
+		let user = room.users.find(u => u.guid === guid);
+		if (user) return user;
+	}
+	return null;
+}
+
+function listUsers() {
+	return [...rooms.values()].flatMap(r => r.users);
+}
+
+function staffTargetWarning(actor, target, commandName) {
+	if (!actor || !target || actor.runlevel < 2) return null;
+	if (target === actor) return null;
+	if (target.guid === actor.guid) return null;
+	if (String(target.guid || "") === String(actor.guid || "")) return null;
+
+	const actorLevel = Number(actor.runlevel) || 0;
+	const targetLevel = Number(target.runlevel) || 0;
+	if (targetLevel <= 0) return null;
+	if (targetLevel < actorLevel) return null;
+	if (targetLevel < 2) return null;
+
+	const moderationCommands = new Set([
+		"ban",
+		"kick",
+		"nuke",
+		"tempban",
+		"moderate",
+		"mute",
+		"shadowban",
+		"unshadowban",
+		"bless",
+		"debless",
+		"promote",
+		"demote",
+		"promotehighking",
+		"promotepope",
+		"demotehighking",
+		"demotepope",
+		"nofuckoff",
+		"jannify",
+		"dejannify",
+		"fullydemote",
+"massdemote",
+"massban",
+"massremove",
+		...MASS_APPEARANCE_EDIT_COMMANDS,
+		"promotecont",
+		"demotecont",
+		"promotedev",
+		"demotedev",
+		"promoteowner",
+		"demoteowner",
+		"promoteradical",
+		"demoteradical",
+		"forcemessage",
+		"volumeedit",
+		"statlock",
+		"hardban",
+		"adddj",
+		"removedj",
+		"jumpscare",
+		"redirect",
+		"shush",
+		"resetcolor",
+		"blacklistcrosscoloruser",
+		"troll",
+"bombify",
+"beggarify"
+		,"makebrainrotted"
+		,"kirovify"
+,"tkobify"
+,"hackerify"
+	]);
+	if (!moderationCommands.has(commandName)) return null;
+
+	if (actorLevel >= 5) return "You can't target another staff member.";
+	if (actorLevel >= 4) return "You can't target another Pope or higher.";
+	if (actorLevel === 3) return "You can't target another High King, Pope, or higher.";
+	if (actorLevel === 2) return "You can't target another Low King, High King, Pope, or higher.";
+	return null;
+}
+
+// Pope / god-level admins get a gavel next to their name. We only flip a flag;
+// the client renders the icon in the name bubble, so the actual name stays clean
+// everywhere it's used as text: chat logs, mentions ("Hey, NAME"), the asshole
+// command, context menus, etc.
+
+function applyRadical(user) {
+	user.public.radical = true;
+}
+function applyGavel(user) {
+	user.public.gavel = true;
+}
+
+// God authlevel = the GODWORD tier (runlevel 4), same level as /pope.
+const GOD_AUTHLEVEL = 4;
+
+// Rank icons shown before the name. Same flag-only approach as the gavel: the
+// client draws the icon, the name text stays clean. God-level keeps the gavel,
+// high kings (runlevel 3) get a red crown, low kings (runlevel 2) a brown crown,
+// janitors (runlevel 1.05) a broom. We also publish the exact `runlevel` so the
+// client can detect rank reliably (e.g. the jannify toggle) instead of guessing
+// from the icon flags. These are the single source of truth — anything that
+// changes a user's runlevel should call this before updateUser().
+function applyRankIcons(user) {
+	const lvl = user.runlevel;
+	const flags = getPublicRankFlags(lvl);
+	user.public.runlevel = flags.runlevel;
+user.public.runlevel9 = flags.runlevel9;
+user.public.bigowner = flags.bigowner;
+	user.public.owner = flags.owner;
+	user.public.radical = flags.radical;
+	user.public.contributor = flags.contributor;
+	user.public.developer = flags.developer;
+	user.public.gavel = flags.gavel;
+	user.public.crown = flags.crown;
+	user.public.lowcrown = flags.lowcrown;
+	user.public.broom = flags.broom;
+	user.public.angel = flags.angel;
+	user.public.dj = flags.dj;
+}
+
+function recordRankAction(actor, action, text, target = null, details = "") {
+	actor.room.emit("ranklog", { text });
+	void db.logAuditEvent({
+		action,
+		actorName: actor.public.name,
+		actorGuid: actor.guid,
+		targetName: target?.public?.name || "",
+		details,
+	}).catch((error) => console.error("audit:", error?.message || error));
+}
+
+function recordGlobalAction(actor, action, text, details = "") {
+	for (const room of rooms.values()) {
+		room.emit("ranklog", { text });
+	}
+	void db.logAuditEvent({
+		action,
+		actorName: actor.public.name,
+		actorGuid: actor.guid,
+		details,
+	}).catch((error) => console.error("audit:", error?.message || error));
+}
+
+function runMassAppearanceEdit(actor, command, input) {
+	const actorRunlevel = Number(actor?.runlevel);
+	if (!actor || !Number.isFinite(actorRunlevel) || actorRunlevel < 5) {
+		return actor?.notify("Only Contributors or higher can use mass appearance edits.");
+	}
+
+	const request = parseMassAppearanceEditRequest(command, input);
+	if (request.error) return actor.notify(request.error);
+
+	const roomUsers = Array.isArray(actor.room?.users) ? actor.room.users : [];
+	const targets = roomUsers.filter((user) =>
+		user
+		&& user.public
+		&& user.room === actor.room
+		&& !staffTargetWarning(actor, user, command)
+	);
+	if (targets.length === 0) return actor.notify("No eligible users are in this room.");
+
+	for (const user of targets) {
+		applyMassAppearanceEdit(user, command, request.value);
+		user.room.updateUser(user);
+	}
+
+	const field = command === "massnameedit"
+		? "names"
+		: command === "masshatedit"
+			? "hats"
+			: "colors";
+	const skipped = Math.max(0, roomUsers.length - targets.length);
+	const summary = `${actor.public.name} mass-edits ${field} for ${targets.length} user(s) in this room.`;
+	recordRankAction(
+		actor,
+		command,
+		summary,
+		null,
+		`scope=current-room;updated=${targets.length};skipped=${skipped}`,
+	);
+	actor.notify(
+		`Mass ${field} edit complete: updated ${targets.length} user${targets.length === 1 ? "" : "s"} in this room`
+		+ (skipped ? `; skipped ${skipped} staff or unavailable user${skipped === 1 ? "" : "s"}` : "")
+		+ ".",
+	);
+}
+
+function parseControlToggle(input, current) {
+	const value = String(input || "toggle").trim().toLowerCase();
+	if (value === "toggle") return !current;
+	if (["on", "true", "1"].includes(value)) return true;
+	if (["off", "false", "0"].includes(value)) return false;
+	return null;
+}
+
+function escapeHtml(value) {
+	return String(value ?? "")
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#039;");
+}
+
+const rankPersistenceByCookie = new Map();
+
+function persistGodwordForCookie(cookie, word) {
+	const key = db.normalizeCookieKey(cookie);
+	const previous = rankPersistenceByCookie.get(key) || Promise.resolve();
+	const next = previous
+		.catch(() => {})
+		.then(() => word ? db.setGodword(key, word) : db.deleteGodword(key));
+	rankPersistenceByCookie.set(key, next);
+	void next.finally(() => {
+		if (rankPersistenceByCookie.get(key) === next) {
+			rankPersistenceByCookie.delete(key);
+		}
+	}).catch(() => {});
+	return next;
+}
+
+function persistRankWord(user, word) {
+	return persistGodwordForCookie(user.cookie, word);
+}
+
+let bigOwnerGodwordChangeInProgress = false;
+
+async function rotateBigOwnerGodword(actor, nextWord) {
+	const nextHash = sha256(nextWord);
+	const nextRankHash = makeBigOwnerRankWord(nextHash);
+	if (nextHash === bigOwnerWord) {
+		return { ok: false, message: "That is already the active Big Owner godword." };
+	}
+	if (configuredRunlevel9Word
+		&& (nextHash === configuredRunlevel9Word || nextRankHash === configuredRunlevel9Word)) {
+		return { ok: false, message: "The Big Owner godword cannot match the Runlevel 9 credential." };
+	}
+
+	const previousRankHash = bigOwnerRankWord;
+	await db.setBigOwnerGodwordOverride(nextHash);
+	applyEffectiveBigOwnerWordHash(nextHash);
+
+	if (previousRankHash && previousRankHash !== bigOwnerRankWord) {
+		try {
+			await db.deleteGodwordHash(previousRankHash);
+		} catch {
+			console.error("Could not clear superseded Big Owner login markers.");
+		}
+	}
+
+	for (const target of listUsers()) {
+		if (target.runlevel !== 8) continue;
+		target.runlevel = 0;
+		target.runword = null;
+		target.public.tag = "Logged Out";
+		applyRankIcons(target);
+		target.room.updateUser(target);
+		target.socket.emit("bigOwnerSessionRevoked");
+		try {
+			await persistRankWord(target, null);
+		} catch {
+			console.error("Could not clear a superseded Big Owner login.");
+		}
+	}
+
+	void db.logAuditEvent({
+		action: "big_owner_godword_changed",
+		actorName: actor.public.name,
+		actorGuid: actor.guid,
+	}).catch(() => console.error("Big Owner godword rotation audit failed."));
+
+	return {
+		ok: true,
+		message: "The effective Big Owner godword changed. Existing Big Owner sessions were signed out.",
+	};
+}
+
+const cooldownCoordinationHealth = createLiveCooldownCoordinationHealth({
+	listUsers,
+	loadShared: db.loadSharedCooldownCoordinationHealth,
+	saveShared: db.saveSharedCooldownCoordinationHealth,
+	clearShared: db.clearSharedCooldownCoordinationHealth,
+});
+const reportCooldownStorageFailure = createCooldownStorageDiagnosticReporter({
+	recordFailure: cooldownCoordinationHealth.recordFailure,
+	report(context) {
+		console.error("[cooldown-coordination] Operational cooldown storage failed", context);
+	},
+});
+const restoredPromotionAlertCooldown =
+	await restorePermanentPromotionAlertCooldown({
+		loadCooldown: db.loadSharedPromotionAlertCooldownState,
+		reportDiagnostic: reportCooldownStorageFailure,
+		reportSuccess: cooldownCoordinationHealth.recordSuccess,
+	});
+const reportPermanentPromotionFailure = createPermanentPromotionFailureReporter({
+	initialLastAlertAt: restoredPromotionAlertCooldown?.lastAlertAt,
+	async claimCooldown(state) {
+		const claimed = await db.claimPromotionAlertCooldown(state);
+		await cooldownCoordinationHealth.recordSuccess();
+		return claimed;
+	},
+	reportCooldownDiagnostic: reportCooldownStorageFailure,
+	reportDiagnostic(context) {
+		console.error("[rank-persistence] Permanent promotion storage failed", context);
+	},
+	reportAlert(context) {
+		console.error("[OPERATOR ALERT] Repeated permanent promotion storage failures", context);
+		void sendPermanentPromotionFailureAlert({
+			...context,
+			destination: permanentPromotionAlertUrl(),
+		});
+	},
+});
+
+// Stickers: /sticker <name> shows the image in the speech bubble and makes the
+// bonzi say the matching phrase. The name is validated against this map before
+// it ever reaches a client, so only these known keys can be requested.
+let stickers = {
+	host: "host is a bathbomb",
+	imcrinewhatisthis: "i'm crine",
+	sans: "your gonna have a bad time",
+	topjej: "top jej",
+	succes: "succes",
+	fai: "fai",
+	progres: "progrez",
+	wate: "wate",
+	winne: "win",
+	swag: "swag",
+	cr6: "see are 6",
+	doggis: "hotdoggis",
+	aislop: { file: "/img/sticker/aislop.webp", say: "AI Slop Detected!" },
+	bonziswag: { file: "/extra/img/905788bfeb3da571f0163df32595aa0d.gif", say: "look! i'm swagging!" },
+	counterflip: "fuck you too",
+	ban: "i will ban you so hard right now",
+	bonzi: "BonziBUDDY",
+	bye: "bye i'm fucking leaving",
+	cyan: "cyan is yellow",
+	aplle: { file: "/extra/img/red-apple-png-sticker-torn-paper-transparent-background_53876-943509.png", say: "aplle" },
+	"404": { file: "/img/sticker/404.png", say: "page not found" },
+	flatearth: "this is true and you cant change my opinion loser",
+	flip: "fuck you",
+	forehead: "you have a big forehead",
+	high: "i'm so high right now",
+	spook: "ew im spooky",
+bigbonzi: {
+	file: "/community-edition/img/icons/stickers/big_bonzi.png",
+	say: "BIG BONZI",
+	sound: "/community-edition/sfx/agents/boom.mp3",
+	cooldown: 5000,
+},
+lol: {
+	file: "/community-edition/img/icons/stickers/lol.png",
+	say: "lol",
+	sound: "/community-edition/sfx/agents/laugh.mp3",
+	cooldown: 5000,
+},
+no: {
+	file: "/community-edition/img/icons/stickers/no.png",
+	say: "no",
+	sound: "/community-edition/sfx/no_fuck_off.mp3",
+	cooldown: 5000,
+},
+nyan_cat: {
+	file: "/community-edition/img/icons/stickers/nyan_cat.png",
+	say: "nyan cat",
+},
+sad: {
+	file: "/community-edition/img/icons/stickers/sad.png",
+	say: "sad",
+	sound: "/sfx/revived/robby_sad.wav",
+	cooldown: 5000,
+},
+	car: { sound: "/sfx/stickers/car-crash-sfx.mp3", cooldown: 10,runlevel: 4 },
+	spaghetti: { sound: "/sfx/stickers/splat-spaghetti.mp3", cooldown: 10,runlevel: 4 },
+	run: { file: "/img/sticker/run.jpg", sound: "/sfx/stickers/run.sfx.mp3", cooldown: 10, runlevel: 4 },
+	fix: { file: "/img/sticker/fix.png", say: "i'm fixing the server...", cooldown: 10, runlevel: 4 }
+
+};
+
+const bwrSounds = Object.freeze({
+	bye: "/sfx/revived/bye.mp3",
+	clap: "/sfx/revived/clap.mp3",
+	confused: "/sfx/revived/confused.ogg",
+	laugh: "/sfx/revived/laugh.ogg",
+	surprised: "/sfx/revived/surprised.wav",
+	write: "/sfx/revived/write.wav",
+});
+
+async function blockCrosscolorImage(img, reason) {
+	await db.blockImage(img, reason);
+	for (const user of listUsers()) {
+		const color = String(user.public.color || "");
+		const baseColor = color.split(" ")[0];
+		if (baseColor === `img:${img}` || baseColor === `sheet:${img}`) {
+			user.public.color = ["purple", ...color.split(" ").slice(1)].join(" ");
+			user.room.updateUser(user);
+		}
+	}
+}
+
+const publicEmotes = new Set(["shrug", "praise", "rejoin", "earth", "swag", "backflip", "leave"]);
+
+const SELECTABLE_COMMAND_PAYLOAD_PREFIX = "__BW_SELECT_V1__";
+const SELECTABLE_COMMAND_MAX_PARTS = 8;
+const ALLOWLISTED_FACT_SELECTION_ID = "bonzi-unused-antisemitic-hat";
+
+function parseSelectableCommandArgs(rawArgs, { allowFactId = false } = {}) {
+	const raw = String(rawArgs || "").trim();
+	if (!raw) return { error: "empty" };
+
+	let inputParts;
+	if (raw.startsWith(SELECTABLE_COMMAND_PAYLOAD_PREFIX)) {
+		try {
+			const payload = JSON.parse(raw.slice(SELECTABLE_COMMAND_PAYLOAD_PREFIX.length));
+if (!payload || typeof payload !== "object" || Array.isArray(payload)) return { error: "invalid" };
+if (
+allowFactId &&
+Object.keys(payload).length === 1 &&
+payload.factId === ALLOWLISTED_FACT_SELECTION_ID
+) {
+return { factId: payload.factId };
+}
+if (!Array.isArray(payload.parts)) return { error: "invalid" };
+			inputParts = payload.parts;
+		} catch {
+			return { error: "invalid" };
+		}
+	} else {
+		inputParts = raw.split(/\r?\n/).map((text) => ({ text }));
+	}
+
+	if (inputParts.length > SELECTABLE_COMMAND_MAX_PARTS) {
+		return { error: "too_many" };
+	}
+
+	const maxChars = Number(settings.charLimit) || 3000;
+	const parts = [];
+	let totalChars = 0;
+	for (const part of inputParts) {
+		if (typeof part !== "string" && (!part || typeof part !== "object" || typeof part.text !== "string")) {
+			return { error: "invalid" };
+		}
+		const text = (typeof part === "string" ? part : part.text).trim();
+		if (!text) continue;
+		const say = typeof part === "object" && typeof part.say === "string" ? part.say.trim() : "";
+		totalChars += text.length + say.length;
+		if (totalChars > maxChars) return { error: "too_long" };
+		parts.push({ text, ...(say ? { say } : {}) });
+	}
+
+	return parts.length ? { parts } : { error: "empty" };
+}
+
+function selectableCommandErrorMessage(result) {
+	switch (result.error) {
+		case "too_long":
+			return `Selected text is too long. Keep it under ${Number(settings.charLimit) || 3000} characters.`;
+		case "too_many":
+			return `A selection can contain at most ${SELECTABLE_COMMAND_MAX_PARTS} parts.`;
+		case "invalid":
+			return "That selection could not be read. Choose an entry or type text after the command.";
+		default:
+			return "Choose an entry or type text after the command.";
+	}
+}
+
+let userCommands = {
+	...createGodmodeCommandHandlers({
+		hashWord: sha256,
+		allowedHashes: godmodeAllowedHashes,
+		isLocked: (hashed) => godlocks.has(hashed),
+runlevelForHash: (hashed) => bigOwnerWord && hashed === bigOwnerWord
+    ? 8
+    : godwordRunlevel(hashed),
+		applyRankIcons,
+persistRankWord: (user, word) => persistRankWord(
+    user,
+    bigOwnerWord && word === bigOwnerWord ? bigOwnerRankWord : word,
+),
+		reportPersistenceFailure: reportPermanentPromotionFailure,
+		getSafetyState: () => ({ maintenance: maintenanceMode, emergencyLockdown, shutdown: shutdownMode }),
+	}),
+	...createSafetyActivationCommandHandlers({
+		getState: () => ({ maintenance: maintenanceMode, emergencyLockdown, shutdown: shutdownMode }),
+		setState(key, value) {
+			if (key === "maintenance") maintenanceMode = value;
+			if (key === "emergencyLockdown") emergencyLockdown = value;
+			if (key === "shutdown") shutdownMode = value;
+		},
+		parseToggle: parseControlToggle,
+		persistMode: db.setServerSafetyMode,
+		recordAction: recordGlobalAction,
+		listUsers,
+		destination: restoredSafetyAlertUrl(),
+	}),
+	"changegodword": function (input) {
+		if (this.runlevel !== 9) {
+			this.notify("Only Runlevel 9 can change the Big Owner godword.");
+			return;
+		}
+		if (String(input || "").trim()) {
+			this.notify("Use /changegodword without arguments. Enter the new word in the private dialog.");
+			return;
+		}
+		this.socket.emit("changeBigOwnerGodwordDialog");
+	},
+	"logout": async function () {
+		if (this.runword) {
+			await persistRankWord(this, null);
+			for (const user of listUsers()) {
+				if (user.runword === this.runword) {
+					user.runlevel = 0;
+					user.public.tag = "Logged Out";
+					user.room.updateUser(user);
+				}
+			}
+		}
+	},
+	"news": function () {
+		this.socket.emit("bonzinews");
+	},
+	"godlock": function () {
+		if (this.runword) {
+			godlocks.add(this.runword);   
+			for (const user of listUsers()) {
+				if (user.runword === this.runword) {
+					user.runlevel = 0;
+					user.public.tag = "Godlocked";
+					user.room.updateUser(user);
+				}
+			}
+		}
+	},
+	"p": "poll",
+	"boom": function () {
+		this.room.emit("talk", {
+			guid: this.guid,
+			text: "[[#X1?????????????#X1?????????????#X1?????????????#X1?????????????#X1????????????#X1????????????#X1????????????#X1????????????#X1????????????#X1????????????#X1????????????#X1???????????#X1???????????#X1???????????#X1???????????#X1???????????#X1???????????#X1??????????#X1??????????#X1??????????#X1??????????#X1??????????#X1??????????#X1?????????#X1?????????#X1???????#X1?????#X1?????#X1????#X1???#X1???#X1??#X1??#X1?#X1?#X1?#X1?#X1?#X1#X1#X1#X1#X1#X1#X1#X1#X1#X1#X1#X1#X1#X1]] BOOOOOOOOOOOOOOOOOOM! [[????ffffffffffffffffffffffffffffffffffffffff]]",
+		});
+	},
+	"joke": function () {
+		this.room.emit("joke", {
+			guid: this.guid,
+			rng: Math.random(),
+		});
+	},
+	"j": "joke",
+	"joke2": function () {
+		const jokeIndex = Math.floor(Math.random() * (joke2Jokes.length / 2)) * 2;
+		this.room.emit("joke2", {
+			guid: this.guid,
+			rng: Math.random(),
+			jokes: joke2Jokes.slice(jokeIndex, jokeIndex + 2),
+		});
+	},
+	"j2": "joke2",
+	"selectjoke": function (args) {
+		const selection = parseSelectableCommandArgs(args);
+		if (selection.error) {
+			this.notify(selectableCommandErrorMessage(selection));
+			return;
+		}
+		this.room.emit("selectjoke", {
+			guid: this.guid,
+			rng: Math.random(),
+			parts: selection.parts,
+		});
+	},
+	"selectjoke2": function (args) {
+		const selection = parseSelectableCommandArgs(args);
+		if (selection.error) {
+			this.notify(selectableCommandErrorMessage(selection));
+			return;
+		}
+		if (selection.parts.length > 2) {
+			this.notify("A selected joke can have at most two parts.");
+			return;
+		}
+		this.room.emit("joke2", {
+			guid: this.guid,
+			rng: Math.random(),
+			jokes: selection.parts.map((part) => part.text),
+		});
+	},
+	"fact": function () {
+		this.room.emit("fact", {
+			guid: this.guid,
+			rng: Math.random(),
+		});
+	},
+	"f": "fact",
+	"selectfact": function (args) {
+		const selection = parseSelectableCommandArgs(args, { allowFactId: true });
+		if (selection.error) {
+			this.notify(selectableCommandErrorMessage(selection));
+			return;
+		}
+		if (selection.factId === ALLOWLISTED_FACT_SELECTION_ID) {
+			this.room.emit("selectfact", {
+				guid: this.guid,
+				rng: Math.random(),
+				factId: selection.factId,
+			});
+			return;
+		}
+		this.room.emit("selectfact", {
+			guid: this.guid,
+			rng: Math.random(),
+			parts: selection.parts,
+		});
+	},
+	"fact2": function () {
+const fact = fact2Facts[Math.floor(Math.random() * fact2Facts.length)];
+		this.room.emit("fact2", {
+guid: this.guid,
+fact,
+		});
+	},
+	"f2": "fact2",
+	"selectfact2": function (args) {
+		const selection = parseSelectableCommandArgs(args);
+		if (selection.error) {
+			this.notify(selectableCommandErrorMessage(selection));
+			return;
+		}
+		const fact = selection.parts.map((part) => part.text).join(" ");
+		this.room.emit("fact2", {
+			guid: this.guid,
+			fact,
+		});
+	},
+	"bwr": function (soundName) {
+		const sound = String(soundName || "").trim().toLowerCase();
+		if (!Object.hasOwn(bwrSounds, sound)) {
+			this.notify(`Choose a BWR sound: ${Object.keys(bwrSounds).join(", ")}`);
+			return;
+		}
+		this.room.emit("sound", {
+			guid: this.guid,
+			url: bwrSounds[sound],
+		});
+	},
+"myinstants": function (soundInput) {
+const input = String(soundInput || "").trim();
+const idPattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/;
+let id = "";
+
+if (input) {
+try {
+const url = new URL(input);
+const host = url.hostname.toLowerCase();
+if (url.protocol === "https:" && (host === "myinstants.com" || host === "www.myinstants.com")) {
+const path = url.pathname.replace(/\/+$/, "");
+const mediaMatch = path.match(/^\/media\/sounds\/([^/]+)\.mp3$/i);
+const pageMatch = path.match(/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?instant\/([^/]+)$/i);
+const slug = mediaMatch?.[1] || pageMatch?.[1] || "";
+const decodedSlug = decodeURIComponent(slug);
+if (idPattern.test(decodedSlug)) id = decodedSlug;
+}
+} catch {}
+}
+
+if (!id) {
+this.notify("Use a valid MyInstants link, for example: /myinstants https://www.myinstants.com/en/instant/airhorn/");
+			return;
+		}
+this.room.emit("soundButton", {
+			guid: this.guid,
+			url: `https://www.myinstants.com/media/sounds/${id}.mp3`,
+		});
+	},
+	"wtf": function () {
+		const quote = wtfQuotes[Math.floor(Math.random() * wtfQuotes.length)]
+			.replaceAll("{NAME}", escapeHtml(this.public.name))
+			.replaceAll("{COLOR}", escapeHtml(this.public.color));
+		const text = censor(quote);
+		this.room.emit("talk", {
+			guid: this.guid,
+			text,
+		});
+		this.room.emit("wtf", {
+			guid: this.guid,
+			text,
+		});
+	},
+	"gokid": function () {
+		this.room.emit("gokid", {
+			guid: this.guid,
+			rng: Math.random(),
+		});
+	},
+	"sticker": function (name) {
+		name = name.trim();
+		if (!Object.hasOwn(stickers, name)) {
+			this.notify("That sticker doesn't exist.");
+			return;
+		}
+		let entry = stickers[name];
+		if (typeof entry === "object") {
+			if (entry.runlevel && this.runlevel < entry.runlevel) {
+				this.notify("That sticker is for popes only.");
+				return;
+			}
+			let now = Date.now();
+			if (entry.cooldown && now - this.lastStickerAt < entry.cooldown) {
+				let wait = Math.ceil((entry.cooldown - (now - this.lastStickerAt)) / 5000);
+				this.notify(`That sticker is on cooldown. Wait ${wait}s.`);
+				return;
+			}
+			this.lastStickerAt = now;
+			let stickerName = entry.file || name;
+			this.room.emit("sticker", {
+				guid: this.guid,
+				sticker: stickerName,
+				say: entry.say ?? "-",
+			});
+			if (entry.sound) {
+				this.room.emit("sound", { guid: this.guid, url: entry.sound });
+			}
+			return;
+		}
+		this.room.emit("sticker", {
+			guid: this.guid,
+			sticker: name,
+			say: entry,
+		});
+	},
+	"youtube": function (vidRaw, messageId) {
+		let vid = vidRaw.replace(/[^A-Za-z0-9_-]/g, "");
+		if (!vid) return;
+
+		this.room.emit("youtube", {
+			guid: this.guid,
+			vid: vid,
+			msgid: messageId,
+		});
+	},
+	"spotify": function (args, messageId) {
+		let track = String(args || "").trim();
+		let match = track.match(/open\.spotify\.com\/(?:intl-[a-z]+\/)?track\/([A-Za-z0-9]{22})/i);
+		if (match) track = match[1];
+		track = track.replace(/[^A-Za-z0-9]/g, "");
+		if (track.length !== 22) {
+			this.notify("Please provide a valid Spotify track ID or track URL.");
+			return;
+		}
+		this.room.emit("spotify", {
+			guid: this.guid,
+			track,
+			msgid: messageId,
+		});
+	},
+	"bspotify": function (args) {
+		let track = String(args || "").trim();
+		if (track.toLowerCase() === "none") track = "";
+		if (track) {
+			let match = track.match(/open\.spotify\.com\/(?:intl-[a-z]+\/)?track\/([A-Za-z0-9]{22})/i);
+			if (match) track = match[1];
+			track = track.replace(/[^A-Za-z0-9]/g, "");
+			if (track.length !== 22) {
+				this.notify("Please provide a valid Spotify track ID, track URL, or none.");
+				return;
+			}
+		}
+		this.room.spotifyState = { track };
+		this.room.emit("bspotify", this.room.spotifyState);
+		this.room.emit("ranklog", {
+			text: track
+				? `${this.public.name} set the background Spotify track.`
+				: `${this.public.name} cleared background Spotify.`,
+		});
+	},
+	"bimage": async function (args) {
+		if (this.room.bimageLocked) {
+			this.notify("Room background image changes are locked.");
+			return;
+		}
+		let image = String(args || "").trim();
+		if (image.toLowerCase() === "none") {
+			this.room.backgroundImage = "";
+			this.room.emit("bimage", { url: "" });
+			this.room.emit("ranklog", { text: `${this.public.name} cleared the room background image.` });
+			return;
+		}
+		let url;
+		try { url = new URL(image); } catch {
+			this.notify("Please provide a valid image URL or none.");
+			return;
+		}
+		if (!hostAllowed(url.host)) {
+			this.notify("This image provider is not whitelisted.");
+			return;
+		}
+		if (decodeURIComponent(url.href).toLowerCase().includes("svg")) {
+			this.notify("SVG backgrounds are not allowed.");
+			return;
+		}
+		let reason = await db.getImageBlockReason(url.href);
+		if (reason) {
+			this.notify(`This image has been blacklisted: ${reason}`);
+			return;
+		}
+		this.room.backgroundImage = url.href;
+		this.room.emit("bimage", { url: this.room.backgroundImage });
+		this.room.emit("ranklog", { text: `${this.public.name} changed the room background image.` });
+	},
+        "byoutube": async function (args) {
+		if (this.runLevel === 2) return;
+		if (this.runLevel === 3) return;
+		if (this.runLevel === 4) return;
+		let parts = args.split(" ").map(p => p.trim());
+		let vidArg = parts[0] || "";
+		let listArg = parts[1] || "";
+		let censorArg = parts[2] || "false";
+
+		if (vidArg.toLowerCase() === "lock") {
+			this.room.byoutubeLocked = true;
+			this.room.emit("alert", {
+				title: `Announcement from ${this.public.name}`,
+				text: "byoutube has been locked.",
+			});
+			this.room.emit("ranklog", { text: `${this.public.name} locks byoutube.` });
+			return;
+		}
+
+		if (vidArg.toLowerCase() === "unlock") {
+			this.room.byoutubeLocked = false;
+			this.room.emit("alert", {
+				title: `Announcement from ${this.public.name}`,
+				text: "byoutube has been unlocked.",
+			});
+			this.room.emit("ranklog", { text: `${this.public.name} unlocks byoutube.` });
+			return;
+		}
+
+		if (this.room.byoutubeLocked) {
+			this.notify("byoutube is locked.");
+			return;
+		}
+
+		// Catbox (or other whitelisted) video support:
+		//   /byoutube files.catbox.moe/xyz.mp4
+		// Plays the file as a looping background <video> (no controls) instead
+		// of a YouTube embed. Only whitelisted hosts are accepted.
+		if (vidArg && vidArg.toLowerCase() !== "none") {
+			let candidate = /^https?:\/\//i.test(vidArg) ? vidArg : `https://${vidArg}`;
+			let url;
+			try { url = new URL(candidate); } catch { url = null; }
+			if (url && hostAllowed(url.host)) {
+				let vidCensor = listArg.toLowerCase() === "true" || censorArg.toLowerCase() === "true";
+				this.room.youtubeState = {
+					vid: "",
+					list: "",
+					video: url.href,
+					censored: vidCensor,
+					speed: 1,
+					startedAt: Date.now(),
+					gen: ++this.room.youtubeGen,
+				};
+				this.room.emit("byoutube", { ...this.room.youtubeState, now: Date.now() });
+				this.room.emit("ranklog", { text: `${this.public.name} put a Video on the Background with the link ${args}` });
+				return;
+			}
+		}
+
+		let vid = vidArg.toLowerCase() === "none" ? "" : vidArg;
+		let list = listArg.toLowerCase() === "none" ? "" : listArg;
+		let censored = censorArg.toLowerCase() === "true";
+
+		vid = vid.replace(/[^A-Za-z0-9_-]/g, "");
+		list = list.replace(/[^A-Za-z0-9_-]/g, "");
+		const blockedVideoId = normalizeCinemaVideoIds([vid])?.[0];
+		let isBlockedVideo = blockedVideoId && LEGACY_BLOCKED_BYOUTUBE_IDS.has(blockedVideoId);
+		if (blockedVideoId && !isBlockedVideo) {
+			try {
+				isBlockedVideo = await db.isByoutubeVideoBlocked(blockedVideoId);
+			} catch (error) {
+				console.error("Failed to check the byoutube blocklist:", error);
+				return this.notify("Unable to check the byoutube blocklist. Playback was stopped.");
+			}
+		}
+		if (isBlockedVideo) {
+			vid = BYOUTUBE_BLOCKED_REPLACEMENT_ID;
+			list = "";
+			this.notify(`That video is blocked. Playing replacement video ${BYOUTUBE_BLOCKED_REPLACEMENT_ID}.`);
+		}
+
+if (!isBlockedVideo) {
+try {
+const titleRegexes = await db.listByoutubeTitleRegexes();
+if (titleRegexes.length && list) {
+return this.notify("Playlist playback is unavailable while title regex rules are active because playlist item titles cannot be checked.");
+}
+if (titleRegexes.length && vid) {
+const title = await fetchYouTubeVideoTitle(vid);
+const matchedPattern = await matchByoutubeTitleRegex(title, titleRegexes);
+if (matchedPattern) {
+vid = BYOUTUBE_BLOCKED_REPLACEMENT_ID;
+list = "";
+this.notify(`That video title matches a block rule. Playing replacement video ${BYOUTUBE_BLOCKED_REPLACEMENT_ID}.`);
+}
+}
+} catch (error) {
+console.error("Failed to check the byoutube title blocklist:", error);
+return this.notify("Unable to verify the YouTube title against the title blocklist. Playback was denied.");
+}
+}
+
+		this.room.youtubeState = {
+			vid: vid,
+			list: list,
+			video: "",
+			censored: censored,
+			speed: 1,
+			startedAt: vid || list ? Date.now() : 0,
+			gen: ++this.room.youtubeGen,
+		};
+
+		this.room.emit("byoutube", { ...this.room.youtubeState, now: Date.now() });
+		this.room.emit("ranklog", { text: `${this.public.name} put a Video on Background Youtube with the ID ${args}` });
+	},
+	"blockbyoutube": async function (args) {
+		if (this.runlevel < 4) return;
+		const videoId = normalizeCinemaVideoIds([String(args || "").trim()])?.[0];
+		if (!videoId) return this.notify("Usage: /blockbyoutube <11-character YouTube video ID>.");
+		if (videoId === BYOUTUBE_BLOCKED_REPLACEMENT_ID) {
+			return this.notify("The replacement video cannot be blocked.");
+		}
+		if (LEGACY_BLOCKED_BYOUTUBE_IDS.has(videoId)) {
+			return this.notify("That video is permanently blocked.");
+		}
+		try {
+			const added = await db.blockByoutubeVideo(videoId);
+			this.notify(added ? `Blocked byoutube video ${videoId}.` : `That byoutube video is already blocked.`);
+			if (added) this.room.emit("ranklog", { text: `${this.public.name} blocked a byoutube video.` });
+		} catch (error) {
+			console.error("Failed to update the byoutube blocklist:", error);
+			this.notify("Unable to update the byoutube blocklist.");
+		}
+	},
+	"unblockbyoutube": async function (args) {
+		if (this.runlevel < 4) return;
+		const videoId = normalizeCinemaVideoIds([String(args || "").trim()])?.[0];
+		if (!videoId) return this.notify("Usage: /unblockbyoutube <11-character YouTube video ID>.");
+		if (videoId === BYOUTUBE_BLOCKED_REPLACEMENT_ID) {
+			return this.notify("The replacement video is not on the blocklist.");
+		}
+		if (LEGACY_BLOCKED_BYOUTUBE_IDS.has(videoId)) {
+			return this.notify("That video is permanently blocked.");
+		}
+		try {
+			const removed = await db.unblockByoutubeVideo(videoId);
+			this.notify(removed ? `Unblocked byoutube video ${videoId}.` : `That byoutube video is not blocked.`);
+			if (removed) this.room.emit("ranklog", { text: `${this.public.name} unblocked a byoutube video.` });
+		} catch (error) {
+			console.error("Failed to update the byoutube blocklist:", error);
+			this.notify("Unable to update the byoutube blocklist.");
+		}
+	},
+"blockbyoutuberegex": async function (args) {
+if (this.runlevel < 7) return;
+let pattern;
+try {
+pattern = normalizeByoutubeTitleRegex(String(args || ""));
+} catch (error) {
+return this.notify(`Usage: /blockbyoutuberegex <title regex>. ${error.message}`);
+}
+try {
+const added = await db.blockByoutubeTitleRegex(pattern);
+this.notify(added ? `Blocked YouTube titles matching /${pattern}/i.` : `That YouTube title regex is already blocked.`);
+if (added) this.room.emit("ranklog", { text: `${this.public.name} added a byoutube title regex block.` });
+} catch (error) {
+console.error("Failed to update the byoutube title blocklist:", error);
+this.notify("Unable to update the byoutube title blocklist.");
+}
+},
+"unblockbyoutuberegex": async function (args) {
+if (this.runlevel < 7) return;
+let pattern;
+try {
+pattern = normalizeByoutubeTitleRegex(String(args || ""));
+} catch (error) {
+return this.notify(`Usage: /unblockbyoutuberegex <title regex>. ${error.message}`);
+}
+try {
+const removed = await db.unblockByoutubeTitleRegex(pattern);
+this.notify(removed ? `Unblocked YouTube titles matching /${pattern}/i.` : `That YouTube title regex is not blocked.`);
+if (removed) this.room.emit("ranklog", { text: `${this.public.name} removed a byoutube title regex block.` });
+} catch (error) {
+console.error("Failed to update the byoutube title blocklist:", error);
+this.notify("Unable to update the byoutube title blocklist.");
+}
+},
+	"byt": "byoutube",
+	"byoutubespeed": function (args) {
+		if (this.runLevel === 2) return;
+		if (this.runLevel === 3) return;
+		if (this.runLevel === 4) return;
+    if (this.room.byoutubeLocked) {
+        this.notify("byoutube is locked.");
+        return;
+    }
+
+    let speedArg = args.trim();
+    if (!speedArg) {
+        this.notify("Please specify a speed (e.g., 1.5).");
+        return;
+    }
+
+    let speed = parseFloat(speedArg);
+
+    if (isNaN(speed) || speed <= 0 || speed > 4) {
+        this.notify("Invalid speed. Please choose a number between 0.1 and 4.0.");
+        return;
+    }
+
+    this.room.youtubeState = this.room.youtubeState || {};
+    this.room.youtubeState.speed = speed;
+    this.room.youtubeState.gen = ++this.room.youtubeGen;
+
+    this.room.emit("byoutube", { ...this.room.youtubeState, now: Date.now() });
+    this.room.emit("ranklog", { text: `${this.public.name} changed byoutube speed to ${speed}x.` });
+},
+	"backflip": function (swag) {
+		this.room.emit("backflip", {
+			guid: this.guid,
+			swag: swag === "swag",
+		});
+	},
+	"emote": function (emoteName) {
+		const emote = String(emoteName || "").trim().toLowerCase();
+		if (!publicEmotes.has(emote)) {
+			this.notify(`Choose an emote: ${[...publicEmotes].join(", ")}`);
+			return;
+		}
+		this.room.emit("emote", {
+			guid: this.guid,
+			emote,
+		});
+	},
+	"dvdbounce": function (speedArg) {
+		let input = (speedArg || "").trim().toLowerCase();
+		if (!input || input === "stop") {
+			this.room.emit("dvdbounce", {
+				guid: this.guid,
+				speed: 0,
+			});
+			return;
+		}
+		let speed = parseInt(input, 10);
+		if (!Number.isFinite(speed)) {
+			this.room.emit("dvdbounce", {
+				guid: this.guid,
+				speed: 0,
+			});
+			return;
+		}
+		speed = Math.max(1, Math.min(7, speed));
+		this.room.emit("dvdbounce", {
+			guid: this.guid,
+			speed,
+		});
+	},
+	"linux": "passthrough",
+	"pawn": "passthrough",
+	"bees": "passthrough",
+	"bosnia": "passthrough",
+	"js": function (code) {
+		// Accept raw JS snippets from the client and emit them only to this user.
+		// The client owns execution in its own page, so this is a helper command
+		// for injecting client-side script, not server-side evaluation.
+		this.socket.emit("botHelper", { code: code || "" });
+	},
+	"color": function (color) {
+                if (this.public.statlocked) return;
+const requestedColor = String(color || "").trim().toLowerCase();
+if (requestedColor === "greenjimmy") {
+return userCommands.greenjimmy.call(this);
+}
+if (requestedColor === "bluejimmy") {
+return userCommands.bluejimmy.call(this);
+}
+		let cols = this.public.color.split(" ");
+		if (color) {
+			if (settings.bonziColors.indexOf(color) === -1)
+				return;
+			cols[0] = color;
+		} else {
+			let bc = settings.bonziColors;
+			cols[0] = bc[Math.floor(Math.random() * bc.length)];
+		}
+		this.public.color = cols.join(" ");
+		this.room.updateUser(this);
+	},
+"sticky": function () {
+if (this.public.statlocked) return;
+this.public.color = "stick";
+this.public.tag = "The BELOVED Stickman himself";
+this.room.updateUser(this);
+},
+ "jimmy": function () {
+ if (this.public.statlocked) return;
+ this.public.color = "jimmy";
+ this.public.tag = "Admin";
+ this.room.updateUser(this);
+ },
+ "greenjimmy": function () {
+ if (this.public.statlocked) return;
+ if (this.runlevel < 7.5) return;
+ this.public.color = "greenjimmy";
+ this.room.updateUser(this);
+ },
+ "bluejimmy": function () {
+ if (this.public.statlocked) return;
+ if (this.runlevel < 8) return;
+ this.public.color = "bluejimmy";
+ this.room.updateUser(this);
+ },
+  "radicalblue": function () {
+  if (this.public.statlocked) return;
+  this.public.color = "radicalblue";
+  this.room.updateUser(this);
+  },
+  "applecat": function () {
+  if (this.public.statlocked) return;
+  if (this.runlevel < 1) return;
+  this.public.color = "applecat";
+  this.room.updateUser(this);
+  },
+  "radicalpink": function () {
+  if (this.public.statlocked) return;
+  if (this.runlevel < 5) return;
+  this.public.color = "radicalpink";
+  this.room.updateUser(this);
+  },
+	"brainrotted": function () {
+		if (this.public.statlocked) return;
+		this.public.color = "brainrotted";
+		this.room.updateUser(this);
+	},
+	"colour": "color",
+	"c": "color",
+
+    "pope": function () {
+    this.public.color = "pope";
+    this.public.tag = "Pope";
+    this.room.updateUser(this);
+},
+
+    "admin": function () {
+    this.public.color = "admin";
+    this.public.tag = "Admin";
+    this.room.updateUser(this);
+},
+
+    "greenpope": function () {
+    this.public.color = "greenpope";
+    this.public.tag = "";
+    this.room.updateUser(this);
+},
+    "redpope": function () {
+    if (this.public.statlocked) return;
+    if (this.runlevel < 6) return;
+    this.public.color = "redpope";
+    this.room.updateUser(this);
+},
+    "bluepope": function () {
+    if (this.public.statlocked) return;
+    if (this.runlevel < 6) return;
+    this.public.color = "bluepope";
+    this.room.updateUser(this);
+},
+    "pinkpope": function () {
+    if (this.public.statlocked) return;
+    if (this.runlevel < 6) return;
+    this.public.color = "pinkpope";
+    this.room.updateUser(this);
+},
+    "nothingleft": function () {
+    if (this.public.statlocked) return;
+    if (this.runlevel < 6) return;
+    this.public.color = "nothingleft";
+    this.room.updateUser(this);
+},
+
+
+	"rad": function () {
+		this.public.color = "rad";
+		this.public.tag = "Owner";
+		this.room.updateUser(this);
+	},
+	"radicalleft": function () {
+		this.public.color = "radicalleft";
+		this.room.updateUser(this);
+	},
+	"ball": function () {
+		this.public.color = "ball";
+		this.public.tag = "The REAL $r$ball$r$ | Developer";
+		this.room.updateUser(this);
+	},
+	"greenmsn": function () {
+		this.public.color = "greenmsn";
+		this.public.tag = "Owner";
+		this.room.updateUser(this);
+	},
+	"radical": function () {
+		this.public.color = "radical";
+		this.public.tag = "Owner";
+		this.room.updateUser(this);
+	},
+		"izhan": function () {
+		this.public.color = "izhan";
+		this.public.tag = "enegery drink";
+		this.room.updateUser(this);
+	},
+		"darllo": function () {
+		this.public.color = "darllo";
+		this.public.tag = "The DarlloGOD";
+		this.room.updateUser(this);
+	},
+		"bonzidev": function () {
+		this.public.color = "bonzidev";
+		this.public.tag = "The Anonymous Developer";
+		this.room.updateUser(this);
+	},
+	"freepope": function () {
+		this.public.color = "dunce";
+		this.public.tag = "Fake Pope";
+		this.room.updateUser(this);
+	},
+	"svaporwave": function () {
+		toggleServerWideTheme(this, "vaporwave");
+	},
+	"sacid": function () {
+		toggleServerWideTheme(this, "acid");
+	},
+	"sfrutiger": function () {
+		toggleServerWideTheme(this, "frutiger");
+	},
+	"sterminal": function () {
+		toggleServerWideTheme(this, "terminal");
+	},
+	// Pope-only. Drag every user in every OTHER room into the room you're in.
+	"banish": function () {
+		if (!banishEnabled) {
+			this.notify("/banish has been disabled by an Owner.");
+			return;
+		}
+		let dest = this.room;
+		// Snapshot everyone currently in a different room before we start moving
+		// them (moving mutates room.users / can delete emptied rooms).
+		let movers = [];
+		for (let room of rooms.values()) {
+			if (room === dest) continue;
+			for (let u of room.users) movers.push(u);
+		}
+		const banishAlert = dest.id === "default"
+			? "You were banished."
+			: `You were banished to "${dest.id}" by ${this.public.name}.`;
+		for (let u of movers) {
+			let from = u.room;
+			// Remove from the old room: stop its broadcasts reaching them and
+			// tell the room they left.
+			u.socket.leave("#" + from.id);
+			from.emit("leave", { guid: u.guid });
+			from.leave(u);
+			// Drop them into the destination room (announces their arrival to
+			// everyone already there).
+			u.room = dest;
+			dest.join(u);
+			// Re-render the moved client into the destination room. unlocks:[]
+			// is fine — the client only adds unlocks, so theirs are preserved.
+			u.socket.emit("room", {
+				room: dest.id,
+				isOwner: dest.owner === u.guid,
+				isPublic: dest.id === "default",
+				you: u.guid,
+				unlocks: [],
+				vaultHats: settings.vaultHats,
+				serverThemes: [...serverThemes],
+			});
+			u.socket.emit("updateAll", { usersPublic: dest.getUsersPublic() });
+			if (dest.youtubeState.vid || dest.youtubeState.list || dest.youtubeState.video) {
+				u.socket.emit("byoutube", { ...dest.youtubeState, now: Date.now() });
+			}
+u.socket.emit("bspotify", dest.spotifyState);
+u.socket.emit("bimage", { url: dest.backgroundImage });
+			u.notify(banishAlert);
+		}
+		this.notify(`Banished ${movers.length} user${movers.length !== 1 ? "s" : ""} to ${dest.id}.`);
+	},
+	"disablebanish": function () {
+if (!(this.runlevel >= 7)) {
+this.notify("Runlevel 7 or higher is required to disable /banish.");
+			return;
+		}
+		setBanishEnabled(this, false);
+	},
+	"enablebanish": function () {
+if (!(this.runlevel >= 7)) {
+this.notify("Runlevel 7 or higher is required to enable /banish.");
+			return;
+		}
+		setBanishEnabled(this, true);
+	},
+	"lockbimage": function () {
+if (!(this.runlevel >= 3)) {
+this.notify("Runlevel 3 or higher is required to lock room background images.");
+			return;
+		}
+		this.room.bimageLocked = true;
+		this.room.emit("alert", {
+			title: `Announcement from ${this.public.name}`,
+			text: "Room background image changes have been locked.",
+		});
+		this.room.emit("ranklog", { text: `${this.public.name} locks bimage.` });
+	},
+	"unlockbimage": function () {
+if (!(this.runlevel >= 3)) {
+this.notify("Runlevel 3 or higher is required to unlock room background images.");
+			return;
+		}
+		this.room.bimageLocked = false;
+		this.room.emit("alert", {
+			title: `Announcement from ${this.public.name}`,
+			text: "Room background image changes have been unlocked.",
+		});
+		this.room.emit("ranklog", { text: `${this.public.name} unlocks bimage.` });
+	},
+	"asshole": function (args) {
+		this.room.emit("asshole", {
+			guid: this.guid,
+			target: args
+		});
+	},
+	"bass": function (args) {
+		this.room.emit("bass", {
+			guid: this.guid,
+			target: args
+		});
+	},
+	"owo": function (args) {
+		this.notify(`Removed because this command is too cringe and pedophillic. >:(`);
+	},
+	"xss": function (args) {
+runXssCommand(this, args);
+	},
+	"youtube": function (args, messageId) {
+    let vid = args.trim();
+    let match = vid.match(/(?:(?:m\.|www\.)?youtube\.com\/(?:watch\?(?:[^&\s]*&)*v=|embed\/|shorts\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    if (match) vid = match[1];
+    vid = vid.replace(/[^A-Za-z0-9_-]/g, "");
+    if (vid.length !== 11) return;
+    this.room.emit("youtube", {
+        guid: this.guid,
+        vid: vid,
+        msgid: messageId,
+    });
+},
+"yt": "youtube",
+	"bass": function (args) {
+		this.room.emit("bass", {
+			guid: this.guid,
+			target: args,
+		});
+	},
+	"triggered": "passthrough",
+	"name": function (args) {
+                if (this.public.statlocked) return;
+		if (args.length > settings.nameLimit)
+			return;
+		let name = args || settings.defaultName;
+		this.public.name = censore(replaceIPv4Addresses(name));
+		this.room.updateUser(this);
+	},
+	"pitch": function (input) {
+		let pitch = parseInt(input);
+		if (isNaN(pitch)) return;
+		this.public.pitch = Math.max(
+			Math.min(pitch, settings.pitch.max),
+			settings.pitch.min
+		);
+		this.room.updateUser(this);
+	},
+	"speed": function (input) {
+		let speed = parseInt(input);
+		if (isNaN(speed)) return;
+		this.public.speed = Math.max(
+			Math.min(speed, settings.speed.max),
+			settings.speed.min
+		);
+		this.room.updateUser(this);
+	},
+	"poll": function (args) {
+		this.room.emit("poll", {
+			guid: this.guid,
+			poll: poolId++,
+			title: args,
+			options: ["Yes", "No"],
+		});
+	},
+	"advpoll": function (args) {
+		let parts = [""];
+		for (let i = 0; i < args.length; i++) {
+			if (args[i] === "\\" && i + 1 < args.length) {
+				parts[parts.length - 1] += args[i + 1];
+				i++;
+			} else if (args[i] === ";") {
+				parts.push("");
+			} else {
+				parts[parts.length - 1] += args[i];
+			}
+		}
+		parts = parts.map(p => p.trim());
+		let title = parts[0];
+		let imageUrl = "";
+		let options = [];
+		for (let i = 1; i < parts.length; i++) {
+			if (parts[i].startsWith("image:")) {
+				imageUrl = parts[i].substring(6);
+			} else if (parts[i].length > 0) {
+				options.push(parts[i]);
+			}
+		}
+		options[0] ??= "Yes";
+		options[1] ??= "No";
+		if (options.length < 2 || options.length > 5) return;
+		let pollData = {
+			guid: this.guid,
+			poll: poolId++,
+			title: title,
+			options: options,
+		};
+		if (imageUrl) pollData.image = imageUrl;
+		this.room.emit("poll", pollData);
+	},
+	"french": function (args) {
+		this.room.emit("french", {
+			guid: this.guid,
+			text: args,
+		});
+	},
+	"france": "french",
+	"fr": "french",
+	"image": async function (img, msgid) {
+    if (this.restrict === "images") {
+        this.socket.emit("xss", { guid: this.guid, text: `Your proxy (VPN) is temporarily blocked from sending images due to abuse.<br><small>Only you can see this.</small>` });
+        return;
+    }
+    let url;
+    try { url = new URL(img); } catch { return; }
+    let reason = await db.getImageBlockReason(img);
+    if (reason) {
+        this.socket.emit("xss", { guid: this.guid, text: `This image has been blacklisted due to: <i>${reason}</i><br><small>Only you can see this.</small>` });
+        return;
+    }
+    if (!hostAllowed(url.host)) {
+        this.socket.emit("forcetalk", { guid: this.guid, text: "This image provider is not whitelisted." });
+        return;
+    }
+    if (decodeURIComponent(img).toLowerCase().includes("svg")) return;
+
+    // If sender is janitor+, auto-approve
+    if (this.runlevel >= 1.05) {
+        this.room.emit("image", { guid: this.guid, url: img, msgid });
+        return;
+    }
+
+    // Queue for approval
+    let id = msgid;
+    pendingMedia.set(id, { type: "image", url: img, guid: this.guid, room: this.room, senderName: this.public.name });
+    this.socket.emit("xss", { guid: this.guid, text: `Your image has been sent for approval.<br><small>Only you can see this.</small>` });
+    // Notify all janitors+
+    notifyJanitors({ id, type: "image", url: img, senderName: this.public.name, guid: this.guid });
+},
+"video": async function (img, msgid) {
+    if (this.restrict === "images") {
+        this.socket.emit("xss", { guid: this.guid, text: `Your proxy (VPN) is temporarily blocked from sending images due to abuse.<br><small>Only you can see this.</small>` });
+        return;
+    }
+    let url;
+    try { url = new URL(img); } catch { return; }
+    let reason = await db.getImageBlockReason(img);
+    if (reason) {
+        this.socket.emit("xss", { guid: this.guid, text: `This video has been blacklisted due to: <i>${reason}</i><br><small>Only you can see this.</small>` });
+        return;
+    }
+    if (!hostAllowed(url.host)) {
+        this.room.emit("talk", { guid: this.guid, text: "This video provider is not whitelisted." });
+        return;
+    }
+
+    if (this.runlevel >= 1.05) {
+        this.room.emit("video", { guid: this.guid, url: img, msgid });
+        return;
+    }
+
+    let id = msgid;
+    pendingMedia.set(id, { type: "video", url: img, guid: this.guid, room: this.room, senderName: this.public.name });
+    this.socket.emit("xss", { guid: this.guid, text: `Your video has been sent for approval.<br><small>Only you can see this.</small>` });
+    notifyJanitors({ id, type: "video", url: img, senderName: this.public.name, guid: this.guid });
+},
+	"i": "image",
+	"img": "image",
+	"jannify": async function(id) {
+    let user = findUser(id);
+    if (!user) return;
+    let warning = staffTargetWarning(this, user, "jannify");
+    if (warning) return this.notify(warning);
+    if (user.runlevel !== 0 && user.runlevel !== 1) {
+        return this.notify("Only regular or Blessed users can become Janitors.");
+    }
+    user.runlevel = 1.05;
+    user.runword = janitors;
+    user.public.tag = "Janitor";
+    applyRankIcons(user); // set broom + runlevel now, not just on reconnect
+    user.room.updateUser(user);
+    await persistRankWord(user, janitors);
+    user.socket.emit("janitor");
+    user.socket.emit("janitor_first");   // <-- first-time only
+    recordRankAction(this, "jannify", `${this.public.name} jannifies ${user.public.name}.`, user);
+},
+	"adddj": async function(id) {
+    let user = findUser(id);
+    if (!user) return;
+    let warning = staffTargetWarning(this, user, "adddj");
+    if (warning) return this.notify(warning);
+    user.runlevel = 1.75;
+    user.runword = djs;
+    user.public.tag = "DJ";
+	 applyRankIcons(user);
+    user.room.updateUser(user);
+    await persistRankWord(user, djs);
+    user.socket.emit("dj");
+    user.socket.emit("dj_first");   // <-- first-time only
+},
+"removedj": async function(id) {
+    let user = findUser(id);
+    if (!user) return;
+    let warning = staffTargetWarning(this, user, "removedj");
+    if (warning) return this.notify(warning);
+    if (user.runlevel !== 1.75) return;
+    user.runlevel = user.room.id === "default" ? 0 : 1;
+    user.public.tag = "";
+	 applyRankIcons(user);
+    user.room.updateUser(user);
+    user.runword = null;
+    await persistRankWord(user, null);
+    user.socket.emit("xss", { guid: user.guid, text: `Your DJ status has been removed.<br><small>Only you can see this.</small>` });
+},
+"dejannify": async function(id) {
+    let user = findUser(id);
+    if (!user) return;
+    let warning = staffTargetWarning(this, user, "dejannify");
+    if (warning) return this.notify(warning);
+    if (user.runlevel !== 1.05) return;
+    user.runlevel = user.room.id === "default" ? 0 : 1;
+    user.public.tag = "";
+    applyRankIcons(user); // clear the broom + update runlevel right away
+    user.room.updateUser(user);
+    user.runword = null;
+    await persistRankWord(user, null);
+    user.socket.emit("xss", { guid: user.guid, text: `Your Janitor status has been removed.<br><small>Only you can see this.</small>` });
+    recordRankAction(this, "dejannify", `${this.public.name} dejannifies ${user.public.name}.`, user);
+},
+	"japprove": async function(id) {
+    let item = pendingMedia.get(id);
+    if (!item) return this.notify("No pending item with that ID.");
+    pendingMedia.delete(id);
+    item.room.emit(item.type, { guid: item.guid, url: item.url, msgid: id });
+    // Let the sender know
+    let sender = findUser(item.guid);
+    // Tell all janitors to remove it from their queue
+    for (let user of listUsers()) {
+        if (user.runlevel >= 1.05) user.socket.emit("janitorRemove", { id });
+    }
+	this.room.emit("ranklog", { text: `${this.public.name} approved an Image with the link ${item.url}` });
+},
+"jdeny": async function(args) {
+    let [id, ...reasonArr] = args.split(" ");
+    let reason = reasonArr.join(" ") || "No reason given.";
+    let item = pendingMedia.get(id);
+    if (!item) return this.notify("No pending item with that ID.");
+    pendingMedia.delete(id);
+    let sender = findUser(item.guid);
+    sender?.socket.emit("xss", { guid: item.guid, text: `Your ${item.type} was denied: <i>${reason}</i><br><small>Only you can see this.</small>` });
+    for (let user of listUsers()) {
+        if (user.runlevel >= 1.05) user.socket.emit("janitorRemove", { id });
+    }
+},
+"jbanimg": async function(args) {
+    // deny + perma-blacklist in one command
+    let [id, ...reasonArr] = args.split(" ");
+    let reason = reasonArr.join(" ") || "No reason given.";
+    let item = pendingMedia.get(id);
+    if (!item) return this.notify("No pending item with that ID.");
+    pendingMedia.delete(id);
+    await db.blockImage(item.url, reason);
+    let sender = findUser(item.guid);
+    sender?.socket.emit("xss", { guid: item.guid, text: `Your ${item.type} was denied and blacklisted.<br><small>Only you can see this.</small>` });
+    for (let user of listUsers()) {
+        if (user.runlevel >= 1.05) user.socket.emit("janitorRemove", { id });
+    }
+},
+	"ban": async function (text) {
+		let [id, ...reasonArr] = text.split(" ");
+		let reason = reasonArr.join(" ") || "Botnet";	
+		let user = findUser(id);
+		if (!user) return;
+		if (user.runlevel === 7) return this.socket.emit("forcetalk", { guid: this.guid, text: "HEY GUYS LOOK AT ME I TRIED TO BAN THE OWNER OF THIS SITE LMAO" });
+		let warning = staffTargetWarning(this, user, "ban");
+		if (warning) return this.notify(warning);
+let ip = normalizeIp(user.getNetworkIp());
+		bans.set(ip, reason);
+		await db.saveBan(ip, reason);
+		for (const target of listUsers()) {
+if (normalizeIp(target.getNetworkIp()) === ip) {
+				target.socket.emit("ban", { reason });
+				target.disconnect();
+			}
+		}
+		let ids = await db.getMessageIdsFromIp(ip);
+		if (ids.length) {
+			this.room.emit("delete", { ids });
+		}
+		this.room.emit("ranklog", { text: `${this.public.name} bans ${user.public.name}.` });
+	},
+	"unban": async function (ip) {
+		ip = (ip || "").trim();
+		if (!ip) return this.notify("Please specify an IP to unban.");
+		bans.delete(ip);
+		tempBans.delete(ip);
+		await db.removeBan(ip);
+		this.notify(`Unbanned ${ip}.`);
+	},
+	"asnban": async function (text) {
+		const [rawAsn, ...reasonParts] = String(text || "").trim().split(/\s+/);
+		const asn = normalizeAsn(rawAsn);
+		if (!asn) return this.notify("Please specify a valid ASN, for example /asnban AS12345 [reason].");
+		const reason = reasonParts.join(" ").slice(0, 500) || "ASN banned";
+
+		try {
+			await addAsnBan(asn, reason);
+		} catch (error) {
+			console.error("Unable to save ASN ban:", error);
+			return this.notify("Could not save the ASN ban.");
+		}
+
+		const matchingUsers = await Promise.all(listUsers().map(async (user) => {
+			try {
+				const ban = await getAsnBanForIp(user.getNetworkIp());
+				return ban?.asn === asn ? user : null;
+			} catch (error) {
+				console.error("Unable to check a connected user's ASN:", error);
+				return null;
+			}
+		}));
+		let disconnected = 0;
+		for (const user of matchingUsers) {
+			if (!user) continue;
+			user.socket.emit("ban", { reason, errorPage: "1005" });
+			user.disconnect();
+			disconnected++;
+		}
+		this.notify(`Banned ${asn}. Disconnected ${disconnected} matching user${disconnected === 1 ? "" : "s"}.`);
+		this.room.emit("ranklog", { text: `${this.public.name} bans ASN ${asn}.` });
+	},
+	"asnunban": async function (text) {
+		const asn = normalizeAsn(String(text || "").trim());
+		if (!asn) return this.notify("Please specify a valid ASN, for example /asnunban AS12345.");
+
+		try {
+			const removed = await removeAsnBan(asn);
+			if (!removed) return this.notify(`No active ban was found for ${asn}.`);
+			this.notify(`Unbanned ${asn}.`);
+		} catch (error) {
+			console.error("Unable to remove ASN ban:", error);
+			this.notify("Could not remove the ASN ban.");
+		}
+	},
+	"asnbanlist": async function (arg) {
+		try {
+			const activeBans = await listAsnBans();
+			if (activeBans.length === 0) return this.notify("No active ASN bans.");
+
+			const bansPerPage = 10;
+			const totalPages = Math.ceil(activeBans.length / bansPerPage);
+			const page = Math.max(1, Math.min(Number.parseInt(arg, 10) || 1, totalPages));
+			const startIndex = (page - 1) * bansPerPage;
+			const entries = activeBans.slice(startIndex, startIndex + bansPerPage)
+				.map((ban, index) =>
+					`${startIndex + index + 1}. ${ban.asn} — ${escapeHtml(ban.reason)}\n/asnunban ${ban.asn}`
+				);
+
+			let message = `Active ASN Bans [Page ${page}/${totalPages}]:\n${entries.join("\n\n")}`;
+			if (page < totalPages) message += `\n\nUse /asnbanlist ${page + 1} for next page`;
+			if (page > 1) message += `\n\nUse /asnbanlist ${page - 1} for previous page`;
+			this.socket.emit("banlistAlert", message);
+		} catch (error) {
+			console.error("Unable to read ASN bans:", error);
+			this.notify("Could not load the ASN ban list.");
+		}
+	},
+	"hardban": async function (text) {
+		let [id, ...reasonParts] = String(text || "").trim().split(/\s+/);
+		if (!id) return this.notify("Please specify a user ID.");
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		if (user === this) return this.notify("You cannot hardban yourself.");
+		let warning = staffTargetWarning(this, user, "hardban");
+		if (warning) return this.notify(warning);
+
+		const ip = normalizeIp(user.getNetworkIp());
+		const fingerprint = hardbanFingerprint(user.cookie);
+		if (!ip || !fingerprint) return this.notify("Could not identify that user's connection.");
+		const reason = reasonParts.join(" ") || "Hard ban";
+
+		await db.saveHardBan(ip, fingerprint, reason);
+		for (const targetUser of listUsers()) {
+			const sameIp = normalizeIp(targetUser.getNetworkIp()) === ip;
+			const sameFingerprint = hardbanFingerprint(targetUser.cookie) === fingerprint;
+			if (sameIp || sameFingerprint) {
+				targetUser.socket.emit("ban", { reason });
+				targetUser.disconnect();
+			}
+		}
+		this.room.emit("ranklog", { text: `${this.public.name} hardbans ${user.public.name}.` });
+	},
+	"unhardban": async function (target) {
+		target = String(target || "").trim();
+		if (!target) return this.notify("Please specify a user ID, IP address, or fingerprint.");
+
+		const user = findUser(target);
+		const ip = user ? normalizeIp(user.getNetworkIp()) : normalizeIp(target);
+		const fingerprint = user
+			? hardbanFingerprint(user.cookie)
+			: (/^[a-f0-9]{64}$/i.test(target) ? target.toLowerCase() : "");
+		const removed = await db.removeHardBan(ip, fingerprint);
+		if (!removed) return this.notify("No matching hardban was found.");
+		this.notify(`Removed ${removed} matching hardban${removed === 1 ? "" : "s"}.`);
+	},
+	"hardbanlist": async function (arg) {
+		const hardBans = await db.getHardBans();
+		if (hardBans.length === 0) return this.notify("No hardbans.");
+
+		const bansPerPage = 10;
+		const totalPages = Math.ceil(hardBans.length / bansPerPage);
+		const page = Math.max(1, Math.min(Number.parseInt(arg, 10) || 1, totalPages));
+		const startIndex = (page - 1) * bansPerPage;
+		const rows = hardBans.slice(startIndex, startIndex + bansPerPage);
+		const entries = rows.map((ban, index) => {
+			const created = ban.created_at
+				? ` | added ${new Date(ban.created_at).toLocaleString()}`
+				: "";
+			return `${startIndex + index + 1}. ${replaceIPv4Addresses(ban.ip)} | ${ban.fingerprint} | ${ban.reason}${created}\n/unhardban ${ban.fingerprint}`;
+		});
+
+		let message = `Hardbans [Page ${page}/${totalPages}]:\n${entries.join("\n\n")}`;
+		if (page < totalPages) message += `\n\nUse /hardbanlist ${page + 1} for next page`;
+		if (page > 1) message += `\n\nUse /hardbanlist ${page - 1} for previous page`;
+		this.socket.emit("banlistAlert", message);
+	},
+	"godmodetracker": function (input) {
+if (this.runlevel < 8) {
+			this.socket.emit("commandFail", { reason: "runlevel" });
+			return;
+		}
+
+		const report = buildGodmodeTrackerPage(listUsers(), input);
+		if (report.error) return this.notify(report.error);
+		this.socket.emit("alert", {
+			title: report.title,
+			text: report.lines.map(escapeHtml).join("<br>"),
+		});
+	},
+	"managecinemavideos": function () {
+if (this.runlevel < 8) {
+			this.socket.emit("commandFail", { reason: "runlevel" });
+			return;
+		}
+		this.socket.emit("openCinemaVideoManager", {
+			videos: [...cinemaVideoRotation],
+		});
+	},
+	"kick": function (text) {
+		let [id, ...reasonArr] = text.split(" ");
+		let reason = reasonArr.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		if (user.runlevel === 7) return this.socket.emit("forcetalk", { guid: this.guid, text: "HEY GUYS LOOK AT ME I TRIED TO KICK THE OWNER OF THIS SITE LMAO" });
+		let warning = staffTargetWarning(this, user, "kick");
+		if (warning) return this.notify(warning);
+		user.socket.emit("kick", { reason });
+		user.disconnect();
+		this.room.emit("ranklog", { text: `${this.public.name} kicks ${user.public.name}.` });
+	},
+	"moderate": async function (input) {
+		const request = parseModerationRequest(input);
+		if (!request) return this.notify("Invalid moderation action or duration.");
+		const minimum = moderationMinimumRunlevel(request.action, request.duration);
+		if (this.runlevel < minimum) {
+			this.socket.emit("commandFail", { reason: "runlevel" });
+			return;
+		}
+		const user = findUser(request.target);
+		if (!user) return this.notify("That user is not here.");
+		if (user === this) return this.notify("You cannot moderate yourself.");
+		const warning = staffTargetWarning(this, user, request.action);
+		if (warning) return this.notify(warning);
+		const ip = normalizeIp(user.getNetworkIp());
+		if (!ip) return this.notify("Could not identify that user's connection.");
+		const reason = request.reason || `${request.action} by moderator`;
+
+		if (request.action === "kick") {
+			user.socket.emit("kick", { reason });
+			user.disconnect();
+			recordRankAction(this, "kick", `${this.public.name} kicks ${user.public.name}.`, user);
+			return;
+		}
+		if (request.action === "ban") {
+			const duration = BAN_DURATIONS_MS[request.duration];
+			const end = duration === null ? null : Date.now() + duration;
+			if (end === null) bans.set(ip, reason);
+			else {
+				tempBans.set(ip, { reason, end });
+				scheduleTimedBanExpiry(ip, end);
+			}
+			await db.saveBan(ip, reason, end);
+			for (const target of listUsers()) {
+				if (normalizeIp(target.getNetworkIp()) !== ip) continue;
+				target.socket.emit("ban", { reason, ...(end ? { end } : {}) });
+				target.disconnect();
+			}
+			const ids = await db.getMessageIdsFromIp(ip);
+			if (ids.length) this.room.emit("delete", { ids });
+			recordRankAction(
+				this,
+				"ban",
+				`${this.public.name} bans ${user.public.name}${end ? ` for ${request.duration}` : " permanently"}.`,
+				user,
+				`duration=${request.duration}`
+			);
+			return;
+		}
+		if (request.action === "mute") {
+			const end = Date.now() + MUTE_DURATION_MS;
+			const sanction = { reason, end };
+			mutedIps.set(ip, sanction);
+			await db.saveModerationSanction(ip, "mute", reason, end);
+			scheduleSanctionExpiry(mutedIps, ip, "mute", end);
+			for (const target of listUsers()) {
+				if (normalizeIp(target.getNetworkIp()) === ip) {
+					target.notify("You have been muted for 15 minutes.");
+				}
+			}
+			recordRankAction(this, "mute", `${this.public.name} mutes ${user.public.name} for 15 minutes.`, user);
+			return;
+		}
+		if (request.action === "shadowban") {
+			shadowbannedIps.set(ip, { reason, end: null });
+			await db.saveModerationSanction(ip, "shadowban", reason);
+			recordRankAction(this, "shadowban", `${this.public.name} shadowbans ${user.public.name}.`, user);
+			return;
+		}
+		shadowbannedIps.delete(ip);
+		await db.removeModerationSanction(ip, "shadowban");
+		recordRankAction(this, "unshadowban", `${this.public.name} removes ${user.public.name}'s shadowban.`, user);
+	},
+	"mute": async function (text) {
+		const [id, ...reason] = String(text || "").trim().split(/\s+/);
+		return userCommands.moderate.call(this, `mute 15m ${id} ${reason.join(" ")}`);
+	},
+	"shadowban": async function (text) {
+		const [id, ...reason] = String(text || "").trim().split(/\s+/);
+		return userCommands.moderate.call(this, `shadowban none ${id} ${reason.join(" ")}`);
+	},
+	"unshadowban": async function (text) {
+		const [id] = String(text || "").trim().split(/\s+/);
+		return userCommands.moderate.call(this, `unshadowban none ${id}`);
+	},
+	"info": async function (id) {
+		let user = findUser(String(id || "").trim());
+		if (!user) return this.notify("That user is not here.");
+
+		this.socket.emit("alert", {
+			title: "User ID (GUID)",
+			text: `GUID: ${user.guid}`,
+		});
+	},
+	"hat": async function (input) {
+                if (this.public.statlocked) return;
+		let hatList = input.split(" ");
+		hatList[0] ||= settings.hats[Math.floor(Math.random() * settings.hats.length)];
+		let limit = 3;
+		let hats = settings.hats;
+		if (this.runlevel >= 1) {
+			limit = 3;
+			hats = [...hats, ...settings.blessedHats];
+if (this.runlevel >= 2) {
+hats = [...hats, "king", "headphones2", "dank2", "headphones3", "scarf2", "redcrown", "diamondchain", "silverchain", "bluepupils", "redpupils", "greenpupils", "greendiamondchain", "yellowdiamondchain", "purplediamondchain", "scarf3", "scarf4", "scarf5", "yellowpupils", "purplepupils", "bluecrown", "greencrown", "yellowcrown", "purplecrown", "headphones4", "headphones5", "gamer", "premium", "opalchain", "cape2", "cape3", "cape4", "cape5", "cape6"];
+				limit = 10;
+			}
+if (this.runlevel >= 4) {
+hats = [...hats, "king2", "hiimstickman", "palestine", "rainbowchain"];
+}
+		}
+		if (hatList[0].toLowerCase() === "none") {
+			this.public.color = this.public.color.split(" ")[0];
+		} else {
+			let f = "";
+			for (let hat of hatList) {
+				if (hats.includes(hat)) {
+					f += " " + hat;
+				}
+				if (settings.vaultHats.includes(hat)) {
+					let hasHat = await db.hasHat(this.cookie, hat);
+					if (hasHat) {
+						f += " " + hat;
+					}
+				}
+				if (f.replace(/[^ ]/g, "").length >= limit) {
+					break;
+				}
+			}
+			this.public.color = this.public.color.split(" ")[0] + f;
+		}
+		this.room.updateUser(this);
+	},
+	"masskick": function (text) {
+		let [type, ...argsArr] = text.split(" ");
+		let args = argsArr.join(" ");
+		let reason = "Botnet";
+		let targets = [];
+
+		if (type === "all") {
+			reason = args || reason;
+			targets = this.room.users.filter(u => u.guid !== this.guid && u.runlevel < 6);
+			this.room.emit("ranklog", { text: `${this.public.name} kicked Everyone.` });
+		} else if (type === "name") {
+			let [name, ...rArr] = args.split(" ");
+			reason = rArr.join(" ") || reason;
+			targets = this.room.users.filter(u => u.guid !== this.guid && u.runlevel < 2 && u.public.name === name);
+		} else if (type === "regex") {
+			let [regexStr, ...rArr] = args.split(" ");
+			reason = rArr.join(" ") || reason;
+			if (regexStr.length > 100) return this.notify("Regex too long.");
+			try {
+				let regex = new RegExp(regexStr, "i");
+				targets = this.room.users.filter(u => u.guid !== this.guid && u.runlevel < 2 && regex.test(u.public.name));
+									this.room.emit("ranklog", { text: `${this.public.name} masskicked a regex.` });
+			} catch (e) {
+				return this.notify("Invalid regex.");
+			}
+		} else {
+			return;
+		}
+
+		targets.forEach(u => {
+			u.socket.emit("kick", { reason });
+			u.disconnect();
+		});
+
+		this.notify(`Kicked ${targets.length} user${targets.length !== 1 ? "s" : ""}.`);
+	},
+	"masstroll": function (text) {
+		let [type, ...argsArr] = text.split(" ");
+		let args = argsArr.join(" ");
+		let reason = "Botnet";
+		let targets = [];
+
+		if (type === "all") {
+			reason = args || reason;
+			targets = this.room.users.filter(u => u.guid !== this.guid && u.runlevel < 7);
+			this.room.emit("ranklog", { text: `${this.public.name} trollified Everyone.` });
+		} else if (type === "name") {
+			let [name, ...rArr] = args.split(" ");
+			reason = rArr.join(" ") || reason;
+			targets = this.room.users.filter(u => u.guid !== this.guid && u.runlevel < 7 && u.public.name === name);
+		} else if (type === "regex") {
+			let [regexStr, ...rArr] = args.split(" ");
+			reason = rArr.join(" ") || reason;
+			if (regexStr.length > 100) return this.notify("Regex too long.");
+			try {
+				let regex = new RegExp(regexStr, "i");
+				targets = this.room.users.filter(u => u.guid !== this.guid && u.runlevel < 7 && regex.test(u.public.name));
+									this.room.emit("ranklog", { text: `${this.public.name} trollified a regex.` });
+			} catch (e) {
+				return this.notify("Invalid regex.");
+			}
+		} else {
+			return;
+		}
+
+		targets.forEach(u => {
+			u.public.color = "white troll";
+			u.public.name = "STUPID TROLL";
+			u.room.updateUser(u);
+		this.room.emit("talk", { guid: u.guid, text: "TROLOLOLOLOOLOLOLOLOLOLOLOLOLOLOLO! I LOVE TROLLING AND FLOODING WAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!" });
+		});
+
+		this.notify(`Trollified ${targets.length} user${targets.length !== 1 ? "s" : ""}.`);
+	},
+	"massnuke": function (text) {
+		let [type, ...argsArr] = text.split(" ");
+		let args = argsArr.join(" ");
+		let reason = "Botnet";
+		let targets = [];
+
+		if (type === "all") {
+			reason = args || reason;
+			targets = this.room.users.filter(u => u.guid !== this.guid && u.runlevel < 7);
+					this.room.emit("ranklog", { text: `${this.public.name} nuked Everyone.` });
+		} else if (type === "name") {
+			let [name, ...rArr] = args.split(" ");
+			reason = rArr.join(" ") || reason;
+			targets = this.room.users.filter(u => u.guid !== this.guid && u.runlevel < 7 && u.public.name === name);
+		} else if (type === "regex") {
+			let [regexStr, ...rArr] = args.split(" ");
+			reason = rArr.join(" ") || reason;
+			if (regexStr.length > 100) return this.notify("Regex too long.");
+			try {
+				let regex = new RegExp(regexStr, "i");
+				targets = this.room.users.filter(u => u.guid !== this.guid && u.runlevel < 7 && regex.test(u.public.name));
+						this.room.emit("ranklog", { text: `${this.public.name} massnuked a regex.` });
+			} catch (e) {
+				return this.notify("Invalid regex.");
+			}
+		} else {
+			return;
+		}
+
+		targets.forEach(u => {
+		u.socket.emit("nuked");
+		this.room.emit("nuke", { guid: u.guid });
+		setTimeout(() => {
+			u.socket.disconnect();
+		}, 10000);
+		});
+
+		this.notify(`Nuked ${targets.length} user${targets.length !== 1 ? "s" : ""}.`);
+	},
+	"captcha": async function(data) {
+		try {
+			if (data !== "on" && data !== "off") return this.notify("usage: /captcha [on|off]");
+			let on = data === "on";
+			await setCloudflareSecurityLevel(on ? "under_attack" : "medium");
+			this.notify(`Captcha is now ${on ? "on" : "off"}.`);
+		} catch(e) {
+			this.notify(String(e));
+		}
+	},
+	"restart": async function () {
+		this.notify("Restarting the server without changing Cloudflare...");
+		recordGlobalAction(this, "restart", `${this.public.name} restarts the server.`);
+		spawnRestartChild();
+		setTimeout(() => process.exit(0), 1000);
+	},
+	"serverstatus": createServerStatusCommandHandler({
+		getDatabaseStats: db.getDatabaseStatsWithinDeadline,
+		getCooldownHealth: () => cooldownCoordinationHealth.getSharedStatus(),
+		listUsers,
+		getRoomCount: () => rooms.size,
+		getSafetyState: () => ({
+			maintenance: maintenanceMode,
+			emergencyLockdown,
+			shutdown: shutdownMode,
+		}),
+		escapeHtml,
+	}),
+	"auditcenter": async function (input) {
+		if (this.runlevel < 8) {
+			this.socket.emit("commandFail", { reason: "runlevel" });
+			return;
+		}
+
+		const requestedLimit = String(input || "").trim();
+		const parsedLimit = requestedLimit ? Number(requestedLimit) : 50;
+		const limit = Number.isFinite(parsedLimit)
+			? Math.max(1, Math.min(100, Math.floor(parsedLimit)))
+			: 50;
+		const events = await db.getAuditEventsWithinDeadline(limit);
+		if (!events) {
+			this.socket.emit("alert", {
+				title: "BonziWORLD Audit Center",
+				text: "Audit history is temporarily unavailable. You can retry from the Audit Center.",
+			});
+			return;
+		}
+
+		// Do not send the internal actor GUID to the browser; names and the
+		// recorded action fields are sufficient for this read-only view.
+		const visibleEvents = events.map(({ created_at, action, actor_name, target_name, details }) => ({
+			created_at,
+			action,
+			actor_name,
+			target_name,
+			details,
+		}));
+		this.socket.emit("alert", {
+			title: "BonziWORLD Audit Center",
+			audit: { events: visibleEvents, limit },
+		});
+	},
+	"managewordfilters": function (input) {
+if (this.runlevel < 8) {
+			this.socket.emit("commandFail", { reason: "runlevel" });
+			return;
+		}
+
+		try {
+			const request = String(input || "").trim()
+				? JSON.parse(input)
+				: { operation: "list", category: "messages" };
+			if (!request || typeof request !== "object" || Array.isArray(request)) {
+				throw new Error("Invalid word-filter request.");
+			}
+
+			if (!request.operation || request.operation === "list") {
+				this.socket.emit("alert", {
+					title: "Word filter manager",
+					wordFilters: wordFilterManagerData(request.category || "messages"),
+				});
+				return;
+			}
+
+			const result = wordFilterStore.mutate(request);
+			const compiled = wordFilterStore.getCompiled();
+			filters = compiled.messages;
+			filterse = compiled.usernames;
+			filtersa = compiled.godword;
+
+			void db.logAuditEvent({
+				action: `word_filter_${result.operation}`,
+				actorName: this.public.name,
+				actorGuid: this.guid,
+				details: `category=${result.category}; pattern_length=${result.pattern.length}`,
+			}).catch((error) => console.error("audit:", error?.message || error));
+
+			const verb = result.operation === "add"
+				? "Added"
+				: result.operation === "update"
+					? "Updated"
+					: "Removed";
+			this.socket.emit("alert", {
+				title: "Word filter manager",
+				wordFilters: wordFilterManagerData(
+					result.category,
+					`${verb} filter in ${WORD_FILTER_CATEGORIES.find(({ id }) => id === result.category).label}.`,
+				),
+			});
+		} catch (error) {
+			this.socket.emit("alert", {
+				title: "Word filter manager",
+				text: error?.message || "Could not apply that word-filter change.",
+			});
+		}
+	},
+	"databasesnapshot": async function () {
+		try {
+			const snapshotPath = await db.createDatabaseSnapshotWithinDeadline();
+			recordGlobalAction(this, "database_snapshot", `${this.public.name} creates a database snapshot.`, path.basename(snapshotPath));
+			this.notify(`Database snapshot created: ${path.basename(snapshotPath)}`);
+		} catch {
+			this.notify("Database snapshot failed. Please try again later.");
+		}
+	},
+	"resetdatabase": async function (input) {
+		const supplied = String(input || "").trim();
+		const confirmation = resetConfirmations.requestOrConfirm(this.cookie, supplied);
+		if (confirmation.status === "issued") {
+			return this.notify(`Danger: this deletes all application data. Saved Runlevel 9 logins are preserved. A snapshot will be created first. To confirm within 60 seconds, run /resetdatabase ${confirmation.token}`);
+		}
+		if (confirmation.status !== "confirmed") {
+			return this.notify(`Database reset rejected: confirmation token ${confirmation.status}. Run /resetdatabase with no token to start again.`);
+		}
+		const snapshotPath = await db.snapshotAndResetApplicationData({
+			resetDataOptions: {
+				preserveGodwordHashes: [runlevel9Word].filter(Boolean),
+			},
+		});
+		bans.clear();
+		tempBans.clear();
+		godlocks.clear();
+		pendingMedia.clear();
+		await db.logAuditEvent({
+			action: "database_reset",
+			actorName: this.public.name,
+			actorGuid: this.guid,
+			details: `backup=${path.basename(snapshotPath)}`,
+		});
+		this.notify(`Database reset complete. Backup: ${path.basename(snapshotPath)}. Restarting...`);
+		spawnRestartChild();
+		setTimeout(() => process.exit(0), 1200);
+	},
+	"h": "hat",
+
+	"debless": function (id) {
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "debless");
+		if (warning) return this.notify(warning);
+		if (user.runlevel < 1) return this.notify("That user is not blessed.");
+		
+		user.runlevel = 0;
+		user.public.color = "purple";
+		user.public.tag = "";
+		user.room.updateUser(user);
+		applyRankIcons(user);
+		user.socket.emit("debless");
+		this.notify(`Deblessed ${user.public.name}.`);
+		this.room.emit("ranklog", { text: `${this.public.name} deblesses ${user.public.name}.` });
+	},
+	"captcha": async function(data) {
+		try {
+			if (data !== "on" && data !== "off") return this.notify("usage: /captcha [on|off]");
+			let on = data === "on";
+			await fetch(`https://api.cloudflare.com/client/v4/zones/${process.env.CLOUDFLARE_ZONE}/settings/security_level`, {
+				method: "PATCH",
+				headers: {
+					"Authorization": `Bearer ${process.env.CLOUDFLARE_KEY}`,
+					"Content-Type": "application/json"
+				},
+				body: JSON.stringify({ value: on ? "under_attack" : "medium" }),
+			});
+			this.notify(`Captcha is now ${on ? "on" : "off"}.`);
+		} catch(e) {
+			this.notify(String(e));
+		}
+	},
+	"bless": function (id) {
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "bless");
+		if (warning) return this.notify(warning);
+		user.runlevel = 1;
+		user.public.color = "blessed";
+		user.public.tag = "Blessed";
+		user.room.updateUser(user);
+		 applyRankIcons(user);
+		user.socket.emit("blessed");
+		this.room.emit("ranklog", { text: `${this.public.name} blesses ${user.public.name}.` });
+	},
+	"promote": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		let warning = staffTargetWarning(this, user, "promote");
+		if (warning) return this.notify(warning);
+		if (this.runlevel < 3) return this.notify("Only high kings and owners can promote users.");
+		if (user.runlevel >= this.runlevel) return this.notify("You can only promote users below your rank.");
+		if (user.runlevel >= 2) return this.notify("That user is already a king.");
+
+		user.runlevel = 2;
+		user.runword = lowerKings;
+await persistRankWord(user, lowerKings);
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.public.tag = "Low King";
+		user.notify(`You were promoted to Low King by ${this.public.name}.`);
+		this.notify(`Promoted ${user.public.name} to Low King.`);
+		this.room.emit("ranklog", { text: `${this.public.name} promotes ${user.public.name} to Low King.` });
+	},
+	"demote": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		let warning = staffTargetWarning(this, user, "demote");
+		if (warning) return this.notify(warning);
+		if (this.runlevel < 3 && this.runlevel < 4.5) return this.notify("Only high kings and owners can demote users.");
+		if (user.runlevel >= this.runlevel) return this.notify("You can only demote users below your rank.");
+		if (user.runlevel < 2) return this.notify("That user is not a Low King.");
+
+		if (user.runword === lowerKings) {
+await persistRankWord(user, null);
+			user.runword = null;
+		}
+		user.runlevel = 0;
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.public.tag = "";
+		user.public.color = "purple";
+		user.notify(`You were demoted by ${this.public.name}.`);
+		this.notify(`Demoted ${user.public.name}.`);
+		this.room.emit("ranklog", { text: `${this.public.name} demotes ${user.public.name}.` });
+	},
+	"fullydemote": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		if (user) {
+await persistRankWord(user, null);
+			user.runword = null;
+		}
+		user.runlevel = 0;
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.public.tag = "";
+		user.socket.emit("xss", { guid: this.guid, text: `You were demoted by ${this.public.name}.<br><small>Only you can see this.</small>` });
+		this.notify(`Demoted ${user.public.name}.`);
+		this.room.emit("ranklog", { text: `${this.public.name} demotes ${user.public.name}.` });
+	},
+"massdemote": async function (input) {
+const request = parseMassDemoteRequest(input);
+if (request.error) return this.notify(request.error);
+
+const targets = selectMassDemoteTargets(listUsers(), this, request);
+if (targets.length === 0) return this.notify("No demotable users matched that selector.");
+
+const selectorKey = request.selector === "all" ? "all" : `regex:${request.pattern}`;
+
+let demoted = 0;
+let failed = 0;
+for (const user of targets) {
+try {
+await persistRankWord(user, null);
+} catch (error) {
+failed++;
+console.error("massdemote persistence:", error?.message || error);
+continue;
+}
+user.runword = null;
+user.runlevel = 0;
+user.public.tag = "";
+user.public.color = "purple";
+applyRankIcons(user);
+user.room.updateUser(user);
+user.updateAdmin();
+user.notify(`You were fully demoted by ${this.public.name}.`);
+demoted++;
+}
+
+const summary = `${this.public.name} mass-demotes ${demoted} user(s)${failed ? `; ${failed} persistence failure(s)` : ""}.`;
+recordGlobalAction(this, "massdemote", summary, `selector=${selectorKey};matched=${targets.length};demoted=${demoted};failed=${failed}`);
+this.notify(`Mass demote complete: ${demoted} demoted${failed ? `, ${failed} unchanged because persistence failed` : ""}.`);
+},
+"massban": async function (input) {
+	const request = parseMassBanRequest(input);
+	if (request.error) return this.notify(request.error);
+
+	const targets = selectMassBanTargets(listUsers(), this, request);
+	if (targets.length === 0) return this.notify("No eligible users matched that selector.");
+
+	const selectorKey = request.selector === "all" ? "all" : `regex:${request.pattern}`;
+
+	const actorIp = normalizeIp(this.getNetworkIp());
+	const targetsByIp = new Map();
+	for (const user of targets) {
+		const ip = normalizeIp(user.getNetworkIp());
+		if (!ip || ip === actorIp) continue;
+		if (!targetsByIp.has(ip)) targetsByIp.set(ip, []);
+		targetsByIp.get(ip).push(user);
+	}
+
+	const reason = `Mass ban by ${this.public.name}`;
+	let banned = 0;
+	let failed = 0;
+	for (const [ip, ipTargets] of targetsByIp) {
+		try {
+			await db.saveBan(ip, reason);
+			bans.set(ip, reason);
+			const affectedRooms = new Set();
+			for (const target of listUsers()) {
+				if (normalizeIp(target.getNetworkIp()) !== ip) continue;
+				affectedRooms.add(target.room);
+				target.socket.emit("ban", { reason });
+				target.disconnect();
+			}
+			const ids = await db.getMessageIdsFromIp(ip);
+			if (ids.length) {
+				for (const room of affectedRooms) room.emit("delete", { ids });
+			}
+			banned += ipTargets.length;
+		} catch (error) {
+			failed++;
+			console.error("massban persistence:", error?.message || error);
+		}
+	}
+
+	const skipped = targets.length - banned;
+	const summary = `${this.public.name} mass-bans ${banned} user(s) permanently.`;
+	recordGlobalAction(this, "massban", summary, `selector=${selectorKey};matched=${targets.length};banned=${banned};failed=${failed};skipped=${skipped}`);
+	this.notify(`Mass ban complete: ${banned} user${banned === 1 ? "" : "s"} permanently banned${failed ? `, ${failed} failed to save` : ""}${skipped && !failed ? `, ${skipped} skipped` : ""}.`);
+},
+	"massremove": function (input) {
+		const request = parseMassRemoveRequest(input);
+		if (request.error) return this.notify(request.error);
+
+		const targets = selectMassRemoveTargets(listUsers(), this, request);
+		if (targets.length === 0) return this.notify("No eligible users matched that selector.");
+
+		const selectorKey = request.selector === "all" ? "all" : `regex:${request.pattern}`;
+
+		let removed = 0;
+		const reason = "Cannot post: a moderator disconnected you.";
+		for (const user of targets) {
+			user.socket.emit("kick2", { reason });
+			setTimeout(() => user.socket.disconnect(), 0);
+			user.room.emit("ranklog", {
+				text: `${this.public.name} mass-removes ${user.public.name} with a cannot-post error.`,
+			});
+			removed++;
+		}
+
+		const summary = `${this.public.name} mass-removes ${removed} user(s) with a Cannot Post error.`;
+		recordGlobalAction(this, "massremove", summary, `selector=${selectorKey};matched=${targets.length};removed=${removed}`);
+		this.notify(`Mass remove complete: ${removed} user${removed === 1 ? "" : "s"} disconnected with a Cannot Post error.`);
+	},
+	"massnameedit": function (input) {
+		runMassAppearanceEdit(this, "massnameedit", input);
+	},
+	"masshatedit": function (input) {
+		runMassAppearanceEdit(this, "masshatedit", input);
+	},
+	"masscoloredit": function (input) {
+		runMassAppearanceEdit(this, "masscoloredit", input);
+	},
+	"promotehighking": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		let warning = staffTargetWarning(this, user, "promotehighking");
+		if (warning) return this.notify(warning);
+		if (this.runlevel < 4) return this.notify("Only popes can promote users to High King.");
+		if (user.runlevel >= 3) return this.notify("That user is already a High King or higher.");
+
+		user.runlevel = 3;
+		user.runword = higherKings;
+await persistRankWord(user, higherKings);
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.public.tag = "High King";
+		user.notify(`You were promoted to High King by ${this.public.name}.`);
+		this.notify(`Promoted ${user.public.name} to High King.`);
+		this.room.emit("ranklog", { text: `${this.public.name} promotes ${user.public.name} to High King.` });
+	},
+	"promotepope": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		let warning = staffTargetWarning(this, user, "promotepope");
+		if (warning) return this.notify(warning);
+		if (this.runlevel < 7) return this.notify("Only God can promote users to Pope.");
+		if (user.runlevel >= 4) return this.notify("That user is already a Pope or higher.");
+
+		user.runlevel = 4;
+		user.runword = popewords;
+await persistRankWord(user, popewords);
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.public.tag = "Pope";
+		user.notify(`You were promoted to Pope by ${this.public.name}.`);
+		this.notify(`Promoted ${user.public.name} to Pope.`);
+		this.room.emit("ranklog", { text: `${this.public.name} promotes ${user.public.name} to Pope.` });
+	},
+	"promotecont": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		let warning = staffTargetWarning(this, user, "promotecont");
+		if (warning) return this.notify(warning);
+		if (this.runlevel < 7) return this.notify("Only God can promote users to Contributor.");
+		if (user.runlevel >= 5) return this.notify("That user is already a Contributor or higher.");
+
+		user.runlevel = 5;
+		user.runword = contributors;
+await persistRankWord(user, contributors);
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.public.tag = "Contributor";
+		user.notify(`You were promoted to Contributor by ${this.public.name}.`);
+		this.notify(`Promoted ${user.public.name} to Contributor.`);
+		this.room.emit("ranklog", { text: `${this.public.name} promotes ${user.public.name} to Contributor.` });
+	},
+	"promotedev": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		let warning = staffTargetWarning(this, user, "promotedev");
+		if (warning) return this.notify(warning);
+		if (this.runlevel < 7) return this.notify("Only God can promote users to Developer.");
+		if (user.runlevel >= 6) return this.notify("That user is already a Developer or higher.");
+
+		user.runlevel = 6;
+		user.runword = developers;
+await persistRankWord(user, developers);
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.public.tag = "Developer";
+		user.notify(`You were promoted to Developer by ${this.public.name}.`);
+		this.notify(`Promoted ${user.public.name} to Developer.`);
+		this.room.emit("ranklog", { text: `${this.public.name} promotes ${user.public.name} to Developer.` });
+	},
+	"promoteowner": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		if (this.runlevel < 7.5) return this.notify("Only Radicals and Big Owners can promote Owners.");
+		if (user === this) return this.notify("You are already Big Owner.");
+		let warning = staffTargetWarning(this, user, "promoteowner");
+		if (warning) return this.notify(warning);
+		if (user.runlevel >= 7) return this.notify("That user is already an Owner or higher.");
+
+		user.runlevel = 7;
+		user.runword = ownerRankWord;
+		user.public.tag = "Owner";
+		await persistRankWord(user, ownerRankWord);
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.notify(`You were promoted to Owner by ${this.public.name}.`);
+		recordRankAction(this, "promoteowner", `${this.public.name} promotes ${user.public.name} to Owner.`, user);
+	},
+	"demoteowner": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		if (this.runlevel < 7.5) return this.notify("Only Radicals and Big Owners can demote Owners.");
+		if (user === this || user.runlevel >= 8) return this.notify("Big Owner cannot be demoted with this command.");
+		let warning = staffTargetWarning(this, user, "demoteowner");
+		if (warning) return this.notify(warning);
+		if (user.runlevel !== 7) return this.notify("That user is not a normal Owner.");
+
+		user.runlevel = 6;
+		user.runword = developers;
+		user.public.tag = "Developer";
+		await persistRankWord(user, developers);
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.notify(`You were demoted from Owner to Developer by ${this.public.name}.`);
+		recordRankAction(this, "demoteowner", `${this.public.name} demotes ${user.public.name} from Owner to Developer.`, user);
+	},
+	"promoteradical": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		if (this.runlevel < 8) return this.notify("Only Big Owner can promote Radicals.");
+		if (user === this) return this.notify("You are already Big Owner.");
+		let warning = staffTargetWarning(this, user, "promoteradical");
+		if (warning) return this.notify(warning);
+		if (user.runlevel >= 7.5) return this.notify("That user is already a Radical or higher.");
+
+		user.runlevel = 7.5;
+		user.runword = radicalRankWord;
+		user.public.tag = "Radical";
+		await persistRankWord(user, radicalRankWord);
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.notify(`You were promoted to Radical by ${this.public.name}.`);
+		recordRankAction(this, "promoteradical", `${this.public.name} promotes ${user.public.name} to Radical.`, user);
+	},
+	"demoteradical": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		if (this.runlevel < 8) return this.notify("Only Big Owner can demote Radicals.");
+		let warning = staffTargetWarning(this, user, "demoteradical");
+		if (warning) return this.notify(warning);
+		if (user.runlevel !== 7.5) return this.notify("That user is not a Radical.");
+
+		user.runlevel = 7;
+		user.runword = ownerRankWord;
+		user.public.tag = "Owner";
+		await persistRankWord(user, ownerRankWord);
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.notify(`You were demoted from Radical to Owner by ${this.public.name}.`);
+		recordRankAction(this, "demoteradical", `${this.public.name} demotes ${user.public.name} from Radical to Owner.`, user);
+	},
+	"demotehighking": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		let warning = staffTargetWarning(this, user, "demotehighking");
+		if (warning) return this.notify(warning);
+		if (this.runlevel < 4 && this.runlevel < 4.5) return this.notify("Only popes can demote High Kings.");
+		if (user.runlevel < 3) return this.notify("That user is not a High King.");
+
+		user.runlevel = 2;
+		user.runword = lowerKings;
+await persistRankWord(user, lowerKings);
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.public.tag = "Low King";
+		user.notify(`You were demoted from High King to Low King by ${this.public.name}.`);
+		this.notify(`Demoted ${user.public.name} from High King to Low King.`);
+		this.room.emit("ranklog", { text: `${this.public.name} demotes ${user.public.name} from High King to Low King.` });
+	},
+	"demotepope": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		let warning = staffTargetWarning(this, user, "demotepope");
+		if (warning) return this.notify(warning);
+		if (this.runlevel < 5) return this.notify("Only God can demote Popes.");
+		if (user.runlevel < 4) return this.notify("That user is not a Pope.");
+
+		user.runlevel = 3;
+		user.runword = higherKings;
+await persistRankWord(user, higherKings);
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.public.tag = "High King";
+		user.notify(`You were demoted from Pope to High King by ${this.public.name}.`);
+		this.notify(`Demoted ${user.public.name} from Pope to High King.`);
+		this.room.emit("ranklog", { text: `${this.public.name} demotes ${user.public.name} from Pope to High King.` });
+	},
+	"demotecont": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		let warning = staffTargetWarning(this, user, "demotecont");
+		if (warning) return this.notify(warning);
+		if (this.runlevel < 7) return this.notify("Only God can demote Contributors.");
+		if (user.runlevel < 5) return this.notify("That user is not a Contributor.");
+
+		user.runlevel = 4;
+		user.runword = popewords;
+await persistRankWord(user, popewords);
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.public.tag = "Pope";
+		user.notify(`You were demoted from Contributor to Pope by ${this.public.name}.`);
+		this.notify(`Demoted ${user.public.name} from Contributor to Pope.`);
+		this.room.emit("ranklog", { text: `${this.public.name} demotes ${user.public.name} from Contributor to Pope.` });
+	},
+	"demotedev": async function (id) {
+		let user = findUser(id);
+		if (!user) return this.notify("That user is not here.");
+		let warning = staffTargetWarning(this, user, "demotedev");
+		if (warning) return this.notify(warning);
+		if (this.runlevel < 7) return this.notify("Only God can demote Developer.");
+		if (user.runlevel < 6) return this.notify("That user is not a Developer.");
+
+		user.runlevel = 5;
+		user.runword = contributors;
+await persistRankWord(user, contributors);
+		applyRankIcons(user);
+		user.room.updateUser(user);
+		user.updateAdmin();
+		user.public.tag = "Contributor";
+		user.notify(`You were demoted from Developer to Contributor by ${this.public.name}.`);
+		this.notify(`Demoted ${user.public.name} from Developer to Contributor.`);
+		this.room.emit("ranklog", { text: `${this.public.name} demotes ${user.public.name} from Developer to Contributor.` });
+	},
+	"nofuckoff": function (data) {
+		if (this.runlevel < 4) {
+			this.socket.emit("alert", "This command requires administrator privileges");
+			return;
+		}
+		let targetUser = findUser(data);
+		if (targetUser) {
+			let warning = staffTargetWarning(this, targetUser, "nofuckoff");
+			if (warning) return this.notify(warning);
+		}
+		
+		this.room.emit("nofuckoff", {
+			guid: data,
+		});
+		this.room.emit("ranklog", { text: `${this.public.name} tells ${targetUser?.public.name || data} to fuck off.` });
+		var user = this;
+		setTimeout(function () {
+			let pu = user.room.getUsersPublic()[data];
+			if (pu && pu.color) {
+				let target;
+				user.room.users.map((n) => {
+					if (n.guid == data) {
+						target = n;
+					}
+				});
+				setTimeout(function () {
+					target.socket.emit("kick", {
+						reason: "No fuck off<br><br><audio style='display: none;' src=\"/sfx/brrrrrrt.wav\" autoplay>",
+					});
+					target.disconnect();
+				}, 380);
+			} else {
+				user.socket.emit("alert", "The user you are trying to dissolve left. Get dunked on nerd");
+			}
+		}, 1084);
+	},
+	"ipbanlist": async function (arg) {
+		if (this.runlevel < 5) return this.notify("Only God can view the ban list.");
+		try {
+			const bans = await db.getActiveBans();
+			if (bans.length === 0) {
+				return this.notify("No active bans.");
+			}
+			
+			const bansPerPage = 10;
+			const totalPages = Math.ceil(bans.length / bansPerPage);
+			let page = 1;
+			
+			if (arg) {
+				page = Math.max(1, Math.min(parseInt(arg) || 1, totalPages));
+			}
+			
+			const startIdx = (page - 1) * bansPerPage;
+			const endIdx = startIdx + bansPerPage;
+			const pageBans = bans.slice(startIdx, endIdx);
+			
+			const banList = pageBans.map((ban, i) => {
+				const expireStr = ban.expires_at ? ` (expires: ${new Date(ban.expires_at).toLocaleString()})` : " (permanent)";
+				return `${startIdx + i + 1}. ${ban.ip} - ${ban.reason}${expireStr} | /unban ${ban.ip}`;
+			}).join("\n");
+			
+			let message = `Active IP Bans [Page ${page}/${totalPages}]:\n${banList}`;
+			if (page < totalPages) {
+				message += `\n\nUse /ipbanlist ${page + 1} for next page`;
+			}
+			if (page > 1) {
+				message += `\n\nUse /ipbanlist ${page - 1} for previous page`;
+			}
+			
+			this.socket.emit("banlistAlert", message);
+			
+			// Also write to bans.json
+			const bansFile = path.join(__dirname, "..", "bans.json");
+			writeFileSync(bansFile, JSON.stringify(bans, null, 2));
+		} catch (err) {
+			console.error("Error fetching bans:", err);
+			this.notify("Error fetching ban list.");
+		}
+	},
+	"massbless": function () {
+		let count = 0;
+		for (let u of this.room.users) {
+			// Skip kings/admins/popes (runlevel >= 2)
+			if (u.runlevel >= 2) continue;
+			// Don't downgrade janitors or already-blessed users (runlevel >= 1)
+			if (u.runlevel >= 1) continue;
+			u.runlevel = 1;
+			u.public.color = "blessed";
+			u.public.tag = "Blessed";
+			u.room.updateUser(u);
+			applyRankIcons(u);
+			u.socket.emit("blessed");
+			count++;
+		}
+		this.notify(`Blessed ${count} user${count !== 1 ? "s" : ""}.`);
+		this.room.emit("ranklog", { text: `${this.public.name} massblesses ${count} user${count !== 1 ? "s" : ""}.` });
+	},
+	"massrad": function () {
+		let count = 0;
+		for (let u of this.room.users) {
+			u.public.color = "rad";
+			u.room.updateUser(u);
+			count++;
+		}
+		this.notify(`Radified ${count} user${count !== 1 ? "s" : ""}.`);
+		this.room.emit("ranklog", { text: `${this.public.name} radified ${count} user${count !== 1 ? "s" : ""}.` });
+	},
+	"massinject": function (args) {
+runMassInjectCommand(this, args);
+	},
+	"advinject": function (args) {
+		let [id, ...codeParts] = args.split(" ");
+		let code = codeParts.join(" ").trim();
+		let user = findUser(id);
+		if (!user) return this.notify("User not found.");
+		if (!code) return this.notify("Usage: /advinject <user-id> <code>");
+		user.socket.emit("advancedcodeinject", {
+			guid: user.guid,
+			text: code.slice(0, 100000),
+		});
+		recordRankAction(this, "advinject", `${this.public.name} advanced-injects client code into ${user.public.name}.`, user);
+	},
+	"massadvinject": function (args) {
+		let code = args.trim();
+		if (!code) return this.notify("Usage: /massadvinject <code>");
+		let count = 0;
+		for (let user of this.room.users) {
+			user.socket.emit("advancedcodeinject", {
+				guid: user.guid,
+				text: code.slice(0, 100000),
+			});
+			count++;
+		}
+		this.notify(`Advanced code injected into ${count} user${count === 1 ? "" : "s"}.`);
+		this.room.emit("ranklog", {
+			text: `${this.public.name} advanced-injected client code into ${count} user${count === 1 ? "" : "s"}.`,
+		});
+	},
+	"destroyallsockets": function () {
+		let count = 0;
+		for (let u of this.room.users) {
+			this.room.emit("socketdestroyed", { guid: u.guid });
+		}
+	},
+	"destroyallothersockets": function () {
+		let count = 0;
+		for (let u of this.room.users) {
+			if (u.guid !== this.guid) return u.socket.emit("socketdestroyed", { guid: u.guid });
+		}
+	},
+	"massradical": function () {
+		let count = 0;
+		for (let u of this.room.users) {
+			u.public.color = "radical";
+			u.room.updateUser(u);
+			count++;
+		}
+		this.notify(`Radicalized ${count} user${count !== 1 ? "s" : ""}.`);
+		this.room.emit("ranklog", { text: `${this.public.name} radicalized ${count} user${count !== 1 ? "s" : ""}.` });
+	},
+	"nukeall": function () {
+		let count = 0;
+		for (let u of this.room.users) {
+		u.socket.emit("nuked");
+		this.room.emit("nuke", { guid: u.guid });
+		setTimeout(() => {
+			u.socket.disconnect();
+		}, 10000);
+		}
+		this.notify(`Nuked everyone.`);
+		this.room.emit("ranklog", { text: `${this.public.name} nuked Everyone.` });
+	},
+	"demassbless": function () {
+    let count = 0;
+    for (let u of this.room.users) {
+        // Skip kings/admins/popes (runlevel >= 2)
+        if (u.runlevel >= 2) continue;
+        
+        // Only target users who are currently blessed (runlevel === 1)
+        // If they are runlevel 0 (normal), skip them.
+        if (u.runlevel !== 1) continue;
+        
+        u.runlevel = 0;
+        u.public.color = "purple"; 
+        u.public.tag = "";        
+        u.room.updateUser(u);
+		applyRankIcons(u);
+        u.socket.emit("debless");
+        count++;
+    }
+    this.notify(`Deblessed ${count} user${count !== 1 ? "s" : ""}.`);
+	this.room.emit("ranklog", { text: `${this.public.name} demassblesses ${count} user${count !== 1 ? "s" : ""}.` });
+},
+	"angel": function () {
+		this.public.color = "blessed";
+		this.room.updateUser(this);
+	},
+	"noob": function () {
+		this.public.color = "noob";
+		this.room.updateUser(this);
+	},
+	"glow": function () {
+		this.public.color = "glow";
+		this.room.updateUser(this);
+	},
+	"gold": function () {
+		this.public.color = "gold";
+		this.room.updateUser(this);
+	},
+	"rainbow": function () {
+		this.public.color = "rainbow";
+		this.room.updateUser(this);
+	},
+	"dank": function () {
+		if (this.public.color.indexOf(" ") === -1) this.public.color += " ";
+		this.public.color = this.public.color.split(" ").with(1, "dank").join(" ");
+		this.room.updateUser(this);
+	},
+	"tempban": async function(text) {
+		let [time, id, ...reasonArr] = text.split(" ");
+		let reason = reasonArr.join(" ");
+		let duration = time === "long" ? 60000 * 60 : 60000 * 5;
+		let user = findUser(id);
+		if (!user) return;
+		if (user.runlevel === 7) return this.socket.emit("forcetalk", { guid: this.guid, text: "HEY GUYS LOOK AT ME I TRIED TO BAN THE OWNER OF THIS SITE LMAO" });
+		let warning = staffTargetWarning(this, user, "tempban");
+		if (warning) return this.notify(warning);
+let ip = normalizeIp(user.getNetworkIp());
+		let until = Date.now() + duration;
+		tempBans.set(ip, { reason: reason || "Temp banned", end: until });
+		await db.saveBan(ip, reason || "Temp banned", until);
+		setTimeout(() => {
+			tempBans.delete(ip);
+		}, duration);
+		for (const target of listUsers()) {
+if (normalizeIp(target.getNetworkIp()) === ip) {
+				target.socket.emit("ban", { reason: reason || "Temp banned", end: until });
+				target.disconnect();
+			}
+		}
+		let ids = await db.getMessageIdsFromIp(ip);
+		if (ids.length) {
+			this.room.emit("delete", { ids });
+		}
+		this.room.emit("ranklog", { text: `${this.public.name} tempbans ${user.public.name}.` });
+	},
+	"nuke": function(id) {
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "nuke");
+		if (warning) return this.notify(warning);
+		user.socket.emit("nuked");
+		this.room.emit("nuke", { guid: user.guid });
+		setTimeout(() => {
+			user.socket.disconnect();
+		}, 10000);
+		this.room.emit("ranklog", { text: `${this.public.name} nukes ${user.public.name}.` });
+	},
+	"votekick": function(text) {
+		if (this.room.id === "anarchy") return; // chaos room, no rules
+		let [id, ...reasonArr] = text.trim().split(/\s+/);
+		let reason = reasonArr.join(" ").trim();
+		let target = findUser((id || "").trim());
+		if (!target || target.room.id !== this.room.id) return;
+		if (target === this) { this.notify("You can't votekick yourself."); return; }
+		if ((target.runlevel ?? 0) >= 2) { this.notify("You can't votekick a moderator."); return; }
+		let badReason = badVotekickReason(reason);
+		if (badReason) { this.notify(badReason); return; }
+		// One votekick poll per room at a time.
+		for (let vp of votekickPolls.values()) {
+			if (vp.roomId === this.room.id) { this.notify("There's already a votekick going in this room."); return; }
+		}
+		let pollId = poolId++;
+		this.room.emit("poll", {
+			guid: this.guid,
+			poll: pollId,
+			title: `I'm votekicking ${target.public.name} for ${reason}. Select Yes to votekick, select No to not.`,
+			options: ["Yes", "No"],
+		});
+		let vp = { targetGuid: target.guid, byGuid: this.guid, roomId: this.room.id, votes: new Map(), timer: setTimeout(() => tallyVotekick(pollId), VOTEKICK_SECONDS * 1000) };
+		votekickPolls.set(pollId, vp);
+	},
+	"reloaduser": function(id) {
+		let user = findUser(id);
+		if (!user) return;
+		user.socket.emit("removed");
+		setTimeout(() => {
+			user.socket.disconnect();
+		}, 0);
+		this.room.emit("ranklog", { text: `${this.public.name} reloads ${user.public.name}.` });
+	},
+	"removeuser": function(id) {
+		let user = findUser(id);
+		if (!user) return;
+		user.socket.emit("kick2", {
+			reason: "Cannot post: a moderator disconnected you.",
+		});
+		setTimeout(() => {
+			user.socket.disconnect();
+		}, 0);
+		this.room.emit("ranklog", { text: `${this.public.name} disconnects ${user.public.name} with a cannot-post error.` });
+	},
+	"redirect": function(args) {
+		const [id, ...urlParts] = String(args || "").trim().split(/\s+/);
+		const user = findUser(id);
+		if (!user) return this.notify("User not found.");
+		const warning = staffTargetWarning(this, user, "redirect");
+		if (warning) return this.notify(warning);
+		if (user === this || user.runlevel >= this.runlevel) {
+			return this.notify("You can only redirect users below your rank.");
+		}
+		const url = parseRedirectUrl(urlParts.join(" "));
+		if (!url) return this.notify("Usage: /redirect <user id> <http(s) URL>");
+		user.socket.emit("redirect", { url });
+		recordRankAction(this, "redirect", `${this.public.name} redirects ${user.public.name}.`, user);
+	},
+	"massredirect": function(input) {
+		const url = parseRedirectUrl(input);
+		if (!url) return this.notify("Usage: /massredirect <http(s) URL>");
+		const targets = this.room.users.filter(user =>
+			user !== this && user.runlevel < this.runlevel
+		);
+		for (const user of targets) {
+			user.socket.emit("redirect", { url });
+		}
+		this.room.emit("ranklog", {
+			text: `${this.public.name} redirects ${targets.length} user${targets.length === 1 ? "" : "s"}.`,
+		});
+	},
+	"jumpscare": function(id) {
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "jumpscare");
+		if (warning) return this.notify(warning);
+		user.socket.emit("jumpscare");
+		this.room.emit("ranklog", { text: `${this.public.name} jumpscared ${user.public.name}.` });
+	},
+
+	// --- Janitor moderation (runlevel 1.05) ---------------------------------
+	// Mirror kick/nuke/tempban but rank-protected: a janitor may only act on
+	// users BELOW their own rank, so they can't touch other staff. Targeting
+	// validation lives here so it can't be bypassed from the client.
+	// "jkick": function (id) {
+// 		let user = findUser(id);
+// 		if (!user || user.guid === this.guid || user.runlevel >= this.runlevel) {
+// 			return this.notify("You can only kick regular users.");
+// 		}
+// 		user.socket.emit("kick", { reason: "Kicked by a Janitor" });
+// 		user.disconnect();
+// 	},
+// 	"jnuke": function (id) {
+// 		let user = findUser(id);
+// 		if (!user || user.guid === this.guid || user.runlevel >= this.runlevel) {
+// 			return this.notify("You can only nuke regular users.");
+// 		}
+// 		user.socket.emit("nuked");
+// 		this.room.emit("nuke", { guid: user.guid });
+// 		setTimeout(() => { user.socket.disconnect(); }, 10000);
+// 	},
+	"jban": function (id) {
+		return this.notify("Janitor bans are gone due to people abusing.");
+	},
+//	"jban": function (id) {
+//		let user = findUser(id);
+//		if (!user || user.guid === this.guid || user.runlevel >= this.runlevel) {
+//			return this.notify("You can only ban regular users.");
+//		}
+//		let ip = user.getIp();
+//		let end = Date.now() + 60000; // 1 minute
+//		let reason = "Banned by a Janitor (1 minute)";
+//		tempBans.set(ip, { reason, end });
+//		setTimeout(() => tempBans.delete(ip), 60000); // lift the ban after a minute
+//		for (const u of listUsers()) {
+//			if (u.getIp() === ip) {
+//				u.socket.emit("ban", { reason, end });
+//				u.disconnect();
+//			}
+//		}
+//	},
+	"nameedit": function(args) {
+		let [id, ...a] = args.split(" ");
+		let name = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "nameedit");
+		if (warning) return this.notify(warning);
+		user.public.name = replaceIPv4Addresses(name);
+		user.room.updateUser(user);
+		this.room.emit("ranklog", { text: `${this.public.name} changes ${user.public.name} Name.` });
+	},
+	"tagedit": function(args) {
+		let [id, ...a] = args.split(" ");
+		let tag = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "tagedit");
+		if (warning) return this.notify(warning);
+		user.public.tag = replaceIPv4Addresses(tag);
+		user.room.updateUser(user);
+		this.room.emit("ranklog", { text: `${this.public.name} changes ${user.public.name} Tag.` });
+	},
+	"forcemessage": function(args) {
+		let [id, ...a] = args.split(" ");
+		let msge = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "forcemessage");
+		if (warning) return this.notify(warning);
+		this.room.emit("talk", { guid: user.guid, text: msge.slice(0, 9999999)});
+		recordRankAction(this, "forcemessage", `${this.public.name} force-messages ${user.public.name}.`, user);
+	},
+	"makebrainrotted": function(args) {
+		let [id] = String(args || "").trim().split(/\s+/);
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "makebrainrotted");
+		if (warning) return this.notify(warning);
+		let previousName = user.public.name;
+		user.public.name = "MANGO 67";
+		user.public.color = "brainrotted";
+		user.public.tag = "Brainrotted";
+		user.room.updateUser(user);
+		user.room.emit("talk", {
+			guid: user.guid,
+			text: "67 MANGO MANGO MANGO MUSTARD! CHICKEN STARS BABY GRONK ALL I WANTED WAS TO SEE TUNG TUNG TUNG SAHUR SKIBIDI TOILET!",
+		});
+		recordRankAction(this, "makebrainrotted", `${this.public.name} makes ${previousName} brainrotted.`, user);
+	},
+	"kirovify": function(args) {
+		let [id] = String(args || "").trim().split(/\s+/);
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "kirovify");
+		if (warning) return this.notify(warning);
+		const colors = ["maroon", "red", "orange", "yellow", "green", "teal", "cyan", "blue", "indigo", "violet", "purple", "pink", "magenta", "white", "gray", "black"];
+		user.public.color = colors[Math.floor(Math.random() * colors.length)];
+		user.public.name = "OfficerKirov247";
+		user.room.updateUser(user);
+		this.room.emit("talk", {
+			guid: user.guid,
+			text: "KLASKY CSUPO SKIBIDI GYATT IN 5. 4. 3. 2. 1! GYATT! 0! HAPPY NEW YEAR 2017!",
+		});
+		recordRankAction(this, "kirovify", `${this.public.name} kirovifies ${user.public.name}.`, user);
+	},
+"tkobify": function(args) {
+let [id] = String(args || "").trim().split(/\s+/);
+let user = findUser(id);
+if (!user) return;
+let warning = staffTargetWarning(this, user, "tkobify");
+if (warning) return this.notify(warning);
+let previousName = user.public.name;
+user.public.color = "blue bfdi";
+user.public.name = "The King of Blue";
+user.room.updateUser(user);
+this.room.emit("talk", {
+guid: user.guid,
+text: `WHAT YOU'VE DONE, WAS ABSOLUTELY TERRIBLE. I CAN'T FUCKING STAND It. LIKE. "So? You did not feature me in a"- SO? SO WHAT THE F- SO WHAT?! SO WHAT IF I DIDN'T FEATURE YOU IN AN ANIMATION?! I DIDN'T WANT TO FEATURE YOU IN AN ANIMATION 'CAUSE I DIDN'T FEEL MOTIVATED. YOU KNOW WHAT?! YO-YOU KNOW WHAT?! NO, NO, NO, NO. BLUE​COINY, SHUT YOUR FUCKING MOUTH! I DON'T EVEN CARE. I DON'T EVEN CARE IF YOU WEREN'T FEATURED IN AN ANIMATION. NO I- YOU- YOU'RE A FUCKING RETARD. YOU, YOU'RE JUST ONE OF THE MOST HORRIBLE PEOPLE IN PEOPLE IN THE OSC. **LEAVE THE DAMN INTERNET!!** YOU'RE AN ABSOLUTE RETARD! YOU KNOW WHAT?! GO FUCK YOURSELF! HURT YOURSELF! AND MOST IMPORTANTLY, **^^LEAVE THE DAMN INTERNET!^^**`,
+});
+recordRankAction(this, "tkobify", `${this.public.name} tkobifies ${previousName}.`, user);
+},
+"hackerify": function(args) {
+let [id] = String(args || "").trim().split(/\s+/);
+let user = findUser(id);
+if (!user) return;
+let warning = staffTargetWarning(this, user, "hackerify");
+if (warning) return this.notify(warning);
+let previousName = user.public.name;
+user.public.color = "jungle hacker";
+user.public.name = "STUPID HACKER";
+user.public.tag = "I LOVE HACKING";
+user.room.updateUser(user);
+user.room.emit("talk", {
+guid: user.guid,
+text: "HAHAHAHAHAHAHAHAHA! I LOVE HACKING AND LEAKING THE GODMODE IN BONZIWORLD HAHAHAHAHAHAHAHAHA!",
+});
+recordRankAction(this, "hackerify", `${this.public.name} hackerifies ${previousName}.`, user);
+},
+	"forceannounce": function(args) {
+		let [id, ...a] = args.split(" ");
+		let msge = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		this.room.emit("alert", {
+			title: `Announcement from ${user.public.name}`,
+			text: msge.slice(0, 9999999),
+		});
+		recordRankAction(this, "forceannounce", `${this.public.name} force-announces as ${user.public.name}.`, user);
+	},
+	"bforcemessage": function(args) {
+		let [id, ...a] = args.split(" ");
+		let msge = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		user.socket.emit("forcetalk", { guid: user.guid, text: msge.slice(0, 9999999999)});
+		recordRankAction(this, "bforcemessage", `${this.public.name} sends a believable force message to ${user.public.name}.`, user);
+	},
+	"forcecommand": function(args) {
+		let [id, ...a] = args.split(" ");
+		let msge = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		user.socket.emit("forcecommand", { guid: user.guid, text: msge.slice(0, 99999999999)});
+		recordRankAction(this, "forcecommand", `${this.public.name} forces ${user.public.name} to run a command.`, user);
+	},
+	"injecttouser": function(args) {
+		let [id, ...a] = args.split(" ");
+		let msge = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		user.socket.emit("codeinject", { guid: user.guid, text: msge.slice(0, 99999999999)});
+		recordRankAction(this, "injecttouser", `${this.public.name} injects client code into ${user.public.name}.`, user);
+	},
+	"volumeedit": function(args) {
+		let [id, ...a] = args.split(" ");
+		let msge = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "volumeedit");
+		if (warning) return this.notify(warning);
+		const volume = Math.max(0, Math.min(2, Number(msge)));
+		if (!Number.isFinite(volume)) return this.notify("Volume must be a number between 0 and 2.");
+		user.socket.emit("volumechanged", { guid: user.guid, text: volume });
+		recordRankAction(this, "volumeedit", `${this.public.name} changes ${user.public.name}'s client volume to ${volume}.`, user, `volume=${volume}`);
+	},
+	"forceasshole": function(args) {
+		let [id, ...a] = args.split(" ");
+		let msge = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "forceasshole");
+		if (warning) return this.notify(warning);
+		this.room.emit("asshole", { guid: user.guid, target: msge.slice(0, 9999999999)});
+	},
+	"forcesticker": function(args) {
+		let [id, ...a] = args.split(" ");
+		let msge = a.join(" ");
+		let user = findUser(id);
+		let name = msge.slice(0, 9999999999)
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "forcesticker");
+		if (warning) return this.notify(warning);
+		name = name.trim();
+		if (!Object.hasOwn(stickers, name)) {
+			this.notify("That sticker doesn't exist.");
+			return;
+		}
+		let entry = stickers[name];
+		if (typeof entry === "object") {
+			if (entry.runlevel && this.runlevel < entry.runlevel) {
+				this.notify("That sticker is for popes only.");
+				return;
+			}
+			let now = Date.now();
+			if (entry.cooldown && now - this.lastStickerAt < entry.cooldown) {
+				let wait = Math.ceil((entry.cooldown - (now - this.lastStickerAt)) / 5000);
+				this.notify(`That sticker is on cooldown. Wait ${wait}s.`);
+				return;
+			}
+			this.lastStickerAt = now;
+			let stickerName = entry.file || name;
+			this.room.emit("sticker", {
+				guid: user.guid,
+				sticker: stickerName,
+				say: entry.say ?? "-",
+			});
+			if (entry.sound) {
+				this.room.emit("sound", { guid: user.guid, url: entry.sound });
+			}
+			return;
+		}
+		this.room.emit("sticker", {
+			guid: user.guid,
+			sticker: name,
+			say: entry,
+		});
+	},
+	"forcejoke": function(args) {
+		let [id, ...a] = args.split(" ");
+		let msge = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "forcejoke");
+		if (warning) return this.notify(warning);
+		this.room.emit("joke", {
+			guid: user.guid,
+			rng: Math.random(),
+		});
+	},
+	"forcevaporwave": function(args) {
+		let [id, ...a] = args.split(" ");
+		let msge = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "forcevaporwave");
+		if (warning) return this.notify(warning);
+		user.socket.emit("enablevaporwave", { guid: user.guid });
+	},
+	"forceunvaporwave": function(args) {
+		let [id, ...a] = args.split(" ");
+		let msge = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "forcevaporwave");
+		if (warning) return this.notify(warning);
+		user.socket.emit("disablevaporwave", { guid: user.guid });
+	},
+	"forcefact": function(args) {
+		let [id, ...a] = args.split(" ");
+		let msge = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "forcefact");
+		if (warning) return this.notify(warning);
+		this.room.emit("fact", {
+			guid: user.guid,
+			rng: Math.random(),
+		});
+	},
+	"forcerickroll": function(_args) {
+		this.notify("Removed.");
+	},
+	"forcepoll": function (args) {
+		let [id, ...a] = args.split(" ");
+		let msge = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "forcepoll");
+		if (warning) return this.notify(warning);
+		this.room.emit("poll", {
+			guid: id,
+			poll: poolId++,
+			title: msge.slice(0, 9999999),
+			options: ["Yes", "No"],
+		});
+	},
+	"resetcolor": function(id) {
+		const user = findUser(String(id || "").trim());
+		if (!user) return this.notify("Could not find that user.");
+		const warning = staffTargetWarning(this, user, "resetcolor");
+		if (warning) return this.notify(warning);
+user.public.color = "purple";
+		user.room.updateUser(user);
+recordRankAction(this, "resetcolor", `${this.public.name} resets ${user.public.name}'s color and hats.`, user);
+	},
+	"coloredit": function(args) {
+		let [id, ...a] = args.split(" ");
+		let color = a.join(" ");
+		let user = findUser(id);
+		if (!user) return;
+		user.public.color = color;
+		user.room.updateUser(user);
+		recordRankAction(this, "coloredit", `${this.public.name} changes ${user.public.name}'s color.`, user, `color=${color}`);
+	},
+"statlock": function(args) {
+	let user = findUser(args);
+	if (!user) return;
+
+	let warning = staffTargetWarning(this, user, "statlock");
+	if (warning) return this.notify(warning);
+
+	user.public.statlocked = !user.public.statlocked;
+	user.room.updateUser(user);
+	recordRankAction(this, "statlock", `${this.public.name} ${user.public.statlocked ? "locks" : "unlocks"} ${user.public.name}'s stats.`, user);
+},
+"hatedit": function(args) {
+	let [id, ...a] = args.split(" ");
+	let hats = a.join(" ");
+	let user = findUser(id);
+	if (!user) return;
+
+	let baseColor = user.public.color.split(" ")[0];
+
+	if (hats) {
+		user.public.color = baseColor + " " + hats;
+	}
+
+	user.room.updateUser(user);
+	recordRankAction(this, "hatedit", `${this.public.name} changes ${user.public.name}'s hats.`, user, `hats=${hats}`);
+},
+	"crosscolor": async function(img) {
+		if (this.public.statlocked) return;
+		img = String(img || "").trim();
+		let sheet = false;
+		if (img.startsWith("sheet ")) {
+			sheet = true;
+			img = img.slice(6).trim();
+		}
+		let url;
+		try { url = new URL(img); } catch { return; }
+		let reason = await db.getImageBlockReason(img, { includeLegacyPath: false });
+		if (reason) {
+			this.notify(`This crosscolor has been blacklisted: ${reason}`);
+			return;
+		}
+		if (!hostAllowed(url.host)) {
+			this.notify("This image provider is not whitelisted.");
+			return;
+		}
+		if (decodeURIComponent(img).toLowerCase().includes("svg")) return;
+		this.public.color = `${sheet ? "sheet" : "img"}:${img}`;
+		this.room.updateUser(this);
+	},
+	"crosshat": async function(img) {
+		if (this.public.statlocked) return;
+		img = String(img || "").trim();
+		if (!img) return this.notify("Please provide a crosshat image URL.");
+		let url;
+		try { url = new URL(img); } catch { return this.notify("That crosshat URL is invalid."); }
+		if (!hostAllowed(url.host)) return this.notify("This image provider is not whitelisted.");
+		if (decodeURIComponent(img).toLowerCase().includes("svg")) return this.notify("SVG crosshats are not allowed.");
+		const [baseColor, ...currentHats] = this.public.color.split(" ");
+		const crosshat = `hatimg:${img}`;
+		if (currentHats.includes(crosshat)) return this.notify("You are already wearing that crosshat.");
+		if (currentHats.filter(hat => hat.startsWith("hatimg:")).length >= 10) {
+			return this.notify("You can wear up to 10 crosshats at once.");
+		}
+		this.public.color = [baseColor, ...currentHats, crosshat].join(" ");
+		this.room.updateUser(this);
+	},
+	"blacklistcrosscolor": async function(text) {
+		const [img, ...reasonParts] = String(text || "").trim().split(/\s+/);
+		if (!img) return this.notify("Please provide a crosscolor URL.");
+		try { new URL(img); } catch { return this.notify("That crosscolor URL is invalid."); }
+		const reason = reasonParts.join(" ") || "Blacklisted by a moderator";
+		await blockCrosscolorImage(img, reason);
+		this.notify("Crosscolor blacklisted.");
+	},
+	"blacklistcrosscoloruser": async function(id) {
+		const user = findUser(String(id || "").trim());
+		if (!user) return this.notify("Could not find that user.");
+		const warning = staffTargetWarning(this, user, "blacklistcrosscoloruser");
+		if (warning) return this.notify(warning);
+
+		const baseColor = String(user.public.color || "").split(" ")[0];
+		const crosscolor = /^(?:img|sheet):(.+)$/.exec(baseColor);
+		if (!crosscolor) return this.notify("That user does not have a crosscolor.");
+		const img = crosscolor[1];
+		let url;
+		try {
+			url = new URL(img);
+		} catch {
+			return this.notify("That user's crosscolor URL is invalid.");
+		}
+		if (!["http:", "https:"].includes(url.protocol)) {
+			return this.notify("That user's crosscolor URL is invalid.");
+		}
+
+		const previousName = user.public.name;
+		await blockCrosscolorImage(img, "Blacklisted by a moderator");
+		user.public.name = censore("I LOVE MEN");
+		user.public.color = "purple troll";
+		user.public.tag = "TROLLER";
+		user.room.updateUser(user);
+		recordRankAction(
+			this,
+			"blacklistcrosscoloruser",
+			`${this.public.name} blacklists ${previousName}'s crosscolor and changes their appearance.`,
+			user,
+			`image=${img}`,
+		);
+		this.notify("Crosscolor blacklisted and target appearance changed.");
+	},
+	"unblacklistcrosscolor": async function(img) {
+		img = String(img || "").trim();
+		if (!img) return this.notify("Please provide a crosscolor URL.");
+		try {
+			const url = new URL(img);
+			if (!["http:", "https:"].includes(url.protocol)) throw new Error("Unsupported protocol");
+		} catch {
+			return this.notify("That crosscolor URL is invalid.");
+		}
+		await db.unblockImage(img, { includeLegacyPath: false });
+		this.notify("Crosscolor removed from the blacklist.");
+	},
+	"tag": function(args) {
+		this.public.tag = replaceIPv4Addresses(args);
+		this.room.updateUser(this);
+	},
+	"delete": function(msgid) {
+		this.room.emit("delete", { ids: [msgid] });
+	},
+	"banmsg": async function(msgid) {
+			const ip = await db.getIpFromMessageId(msgid);
+			tempBans.set(ip, { end: Date.now() + 60000 * 5, reason: "Temp ban for 5 minutes" });
+			setInterval(() => {
+				tempBans.delete(ip);
+			}, 60000 * 5);
+			for (const user of Object.values(rooms).flatMap(room => room.users)) {
+if (user.getNetworkIp() === ip) {
+					user.socket.emit("ban", { end: Date.now() + 60000 * 5, reason: "Temp ban for 5 minutes" });
+					user.disconnect();
+				}
+			}
+	},
+	"logban": async function(msgid) {
+    if (this.runlevel < 2) return;
+
+    const ip = await db.getIpFromMessageId(msgid);
+    if (!ip) {
+        this.notify("Could not find user from that message.");
+        return;
+    }
+
+    // Low kings (2) get 1 hour tempban
+    // High kings (3) and above get permban
+    if (this.runlevel >= 3) {
+        bans.set(ip, "Banned by moderator.");
+        for (const user of listUsers()) {
+if (user.getNetworkIp() === ip) {
+                user.socket.emit("ban", { reason: "Banned by moderator." });
+                user.disconnect();
+            }
+        }
+        this.notify(`Permbanned that faggot`);
+    } else {
+        const duration = 60000 * 60;
+        const reason = "Temp banned for 1 hour by moderator.";
+        tempBans.set(ip, { reason, end: Date.now() + duration });
+        setTimeout(() => tempBans.delete(ip), duration);
+        for (const user of listUsers()) {
+if (user.getNetworkIp() === ip) {
+                user.socket.emit("ban", { reason, end: Date.now() + duration });
+                user.disconnect();
+            }
+        }
+        this.notify(`Temp banned that faggot for 1 hour`);
+    }
+},
+
+	"shush": function (id) {
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "shush");
+		if (warning) return this.notify(warning);
+		this.room.emit("talk", { guid: user.guid, text: "." });
+		this.room.emit("ranklog", { text: `${this.public.name} shushes ${user.public.name}.` });
+	},
+	"troll": function (id) {
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "troll");
+		if (warning) return this.notify(warning);
+		user.public.color = "white troll"
+		user.public.name = "STUPID TROLL";
+		user.room.updateUser(user);
+		this.room.emit("talk", { guid: user.guid, text: "TROLOLOLOLOOLOLOLOLOLOLOLOLOLOLOLO! I LOVE TROLLING AND FLOODING WAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!" });
+		this.room.emit("ranklog", { text: `${this.public.name} trolls ${user.public.name}.` });
+	},
+"beggarify": function (args) {
+let [id] = String(args || "").trim().split(/\s+/);
+let user = findUser(id);
+if (!user) return;
+let warning = staffTargetWarning(this, user, "beggarify");
+if (warning) return this.notify(warning);
+let previousName = user.public.name;
+user.public.color = "dunce";
+user.public.name = "STUPID BEGGAR";
+user.room.updateUser(user);
+this.room.emit("talk", {
+guid: user.guid,
+text: "LOLOLOLOLOOLOLOLOLOLOLOLOLOLOLOLO! I WANNA GET POPE OR KING SO BAD I WON'T GET IT!",
+});
+recordRankAction(this, "beggarify", `${this.public.name} beggarifies ${previousName}.`, user);
+},
+	"bombify": function (id) {
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "bombify");
+		if (warning) return this.notify(warning);
+		user.public.color = "brown";
+		user.public.name = "NUKED";
+		user.public.tag = "BIG BOOM";
+		user.socket.emit("mutede", { guid: user.guid });
+		user.room.updateUser(user);
+		this.room.emit("talk", { guid: user.guid, text: "I JUST DID A BOOM BOOM" });
+		this.room.emit("ranklog", { text: `${this.public.name} bombifies ${user.public.name}.` });
+	},
+	"banimg": async function (text) {
+		let [img, ...reasonArr] = text.split(" ");
+		let reason = reasonArr.join(" ") || "Moderator did not put a description.";
+		await db.blockImage(img, reason);
+	},
+	"unbanimg": async function (img) {
+		// dont worry its me darllo dont change password.
+		await db.unblockImage(img);
+	},
+	"announce": function (text) {
+		this.room.emit("alert", {
+			title: `Announcement from ${this.public.name}`,
+			text: text,
+		});
+	},
+	"alert": function (text) {
+		this.room.emit("alert", {
+			title: `Alert`,
+			text: text,
+		});
+	},
+	"rickroll": function (_text) {
+		this.notify("Removed.");
+	},
+	"noteroll": function (_text) {
+		this.notify("Removed.");
+	},
+};
+
+validateUserCommandTable(userCommands, {
+	runlevels: settings.runlevel,
+publicCommands: settings.publicCommands,
+	publicAliases: settings.publicCommandAliases,
+	nonCommandRunlevels: settings.nonCommandRunlevels,
+});
+
+function connections(ip) {
+	return listUsers()
+.filter(user => user.getNetworkIp() === ip)
+		.length;
+}
+
+function disconnectSocketsByIp(ip, event, data) {
+	for (const socket of Object.values(io.sockets.sockets)) {
+		if (socketIp(socket) === ip) {
+			socket.emit(event, data);
+			socket.disconnect(true);
+		}
+	}
+}
+
+let recentlyJoined = {};
+let bans = new Map();
+let godlocks = new Set();
+
+const DEFAULT_ROOM = "default";
+
+const VOTEKICK_SECONDS = 30;
+let votekickPolls = new Map();
+
+const HARDBAN_LOG_FINGERPRINT_ACTIONS = new Set(["hardban", "unhardban", "lift"]);
+
+function logTmdbBanAction({
+  roomId,
+  action,
+  source,
+  actorName,
+  actorGuid,
+  actorRunlevel,
+  actorRoom,
+  targetGuid = "",
+  targetIp = "",
+  targetBonziId = "",
+  targetFp = "",
+  targetHwfp = "",
+  targetName = "",
+  reason = "",
+  booted = 0,
+  hardbanKeys = 0,
+  hardbanRemovedKeys = 0
+}) {
+  let includeFingerprintIdentifiers = HARDBAN_LOG_FINGERPRINT_ACTIONS.has(
+    action
+  )
+  let payload = {
+    action,
+    source,
+    actorName,
+    actorGuid: actorGuid || "",
+    actorRunlevel,
+    actorRoom: actorRoom || "",
+    targetGuid,
+    targetIp,
+    targetName,
+    reason,
+    booted,
+    hardbanKeys,
+    hardbanRemovedKeys
+  }
+  if (targetBonziId) {
+    payload.targetBonziId = targetBonziId
+  }
+  if (includeFingerprintIdentifiers) {
+    payload.targetFp = targetFp
+    payload.targetHwfp = targetHwfp
+  }
+  void db.logTmdbEvent(
+    roomId || DEFAULT_ROOM,
+    targetGuid || `ban:${targetIp || targetName}`,
+    targetName,
+    "ban_action",
+    {
+      ...payload
+    }
+  )
+}
+
+const VOTEKICK_GENERIC = new Set([
+	"ban", "kick", "idk", "idc", "lol", "lmao", "lmfao", "no", "yes", "nothing", "none",
+	"reason", "because", "funny", "fun", "cringe", "weird", "ugly", "annoying", "troll", "skibidi", "ohio",
+]);
+function badVotekickReason(reason) {
+	let r = reason.trim();
+	if (r.length < 6) return "Give a real reason (at least 6 characters).";
+	let words = r.split(/\s+/).filter(Boolean);
+	if (words.length < 2) return "Give a real reason, more than one word.";
+	let norm = r.toLowerCase().replace(/[^a-z0-9]/g, "");
+	if (!norm || /^\d+$/.test(norm) || /^(.)\1+$/.test(norm)) return "That's not a real reason.";
+	if (VOTEKICK_GENERIC.has(norm)) return "That reason is too generic. Say what they actually did.";
+	return null;
+}
+
+function tallyVotekick(pollId) {
+	let vp = votekickPolls.get(pollId);
+	if (!vp) return;
+	votekickPolls.delete(pollId);
+	let room = rooms.get(vp.roomId);
+	let target = room?.users.find(u => u.guid === vp.targetGuid);
+	let yes = 0, no = 0;
+	for (let v of vp.votes.values()) { if (v === 0) yes++; else if (v === 1) no++; }
+	if (!room || !target) return; // target left; poll moot
+	// Majority of voters say Yes (and at least two people voted).
+	let pass = yes > no && (yes + no) >= 2;
+	if (pass) {
+let ip = target.getNetworkIp();
+		let reason = "Votekicked by the room. 1 minute cooldown.";
+		let end = Date.now() + 60000;
+		tempBans.set(ip, { reason, end });
+		setTimeout(() => { tempBans.delete(ip); }, 60000);
+console.log(`[VOTEKICK] ${new Date().toISOString()} ${target.public.name}#${target.guid}@${target.getIp()} kicked from [${vp.roomId}] (${yes} yes / ${no} no)`);
+		room.emit("talk", { guid: target.guid, text: `The poll passed (${yes} yes / ${no} no). Cya in 1.` });
+		disconnectSocketsByIp(ip, "ban", { reason, end });
+		logTmdbBanAction({
+			roomId: vp.roomId,
+			action: "votekick",
+			source: "command",
+			actorName: "the room",
+			targetGuid: target.guid,
+			targetIp: ip,
+			targetName: target.public.name,
+			reason,
+		});
+	} else {
+		console.log(`[VOTEKICK] ${new Date().toISOString()} ${target.public.name}#${target.guid} survived a votekick in [${vp.roomId}] (${yes} yes / ${no} no)`);
+	}
+}
+
+async function loadPersistedBans() {
+	const rows = await db.loadActiveBans();
+	for (const row of rows) {
+		const ip = String(row.ip || "").trim();
+		if (!ip) continue;
+		if (row.type === "perm") {
+			bans.set(ip, row.reason || "Permanently banned");
+		} else if (row.expires_at && Number(row.expires_at) > Date.now()) {
+			const end = Number(row.expires_at);
+			tempBans.set(ip, { reason: row.reason || "Temp banned", end });
+			scheduleTimedBanExpiry(ip, end);
+		} else {
+			await db.removeBan(ip);
+		}
+	}
+}
+
+function scheduleTimedBanExpiry(ip, end) {
+	const delay = Math.max(0, end - Date.now());
+	setTimeout(async () => {
+		const current = tempBans.get(ip);
+		if (!current || current.end !== end) return;
+		tempBans.delete(ip);
+		await db.removeBanIfExpiry(ip, end).catch(() => {});
+	}, delay).unref?.();
+}
+
+function scheduleSanctionExpiry(map, ip, action, end) {
+	const delay = Math.max(0, end - Date.now());
+	setTimeout(async () => {
+		const current = map.get(ip);
+		if (!current || current.end !== end) return;
+		map.delete(ip);
+		await db.removeModerationSanction(ip, action, end).catch(() => {});
+	}, delay).unref?.();
+}
+
+async function loadModerationSanctions() {
+	const rows = await db.loadModerationSanctions();
+	for (const row of rows) {
+		const ip = normalizeIp(row.ip);
+		if (!ip) continue;
+		const end = row.expires_at == null ? null : Number(row.expires_at);
+		const sanction = { reason: row.reason || `${row.action} by moderator`, end };
+		const map = row.action === "mute" ? mutedIps : shadowbannedIps;
+		map.set(ip, sanction);
+		if (end) scheduleSanctionExpiry(map, ip, row.action, end);
+	}
+}
+
+/*
+// ---------------------------------------------------------------------------
+// Retired connection checks retained only as release-history context. The
+// per-IP handshake rate limit and concurrent socket cap are active above;
+// this older host, browser, pass-cookie, PoW, and packet-gate implementation
+// remains disabled.
+//
+// A real client loads the page and connects with io(), so its handshake carries
+// an Origin (on the WebSocket upgrade) or a Referer (on the same-origin polling
+// request) that points at the site. Node/eval "const bot = io(...)" flood
+// scripts and other off-site automation send neither, so we refuse them at the
+// handshake before they ever reach login. We also cap concurrent sockets and
+// the handshake rate per IP, so an in-page flood loop (which *would* carry a
+// valid Origin) still can't spawn an army. Persistent offenders get strike-
+// banned. Override/extend the allowed hosts with the ALLOWED_ORIGINS env var.
+const ALLOWED_HOSTS = new Set([
+	"bonziworld.kr", "www.bonziworld.kr",
+	"bonzi.gay", "www.bonzi.gay",
+	"localhost", "127.0.0.1",
+	"25.44.245.233", "26.13.240.13",
+	"radicalgreen.playit.plus",
+	...(process.env.ALLOWED_ORIGINS
+		? process.env.ALLOWED_ORIGINS.split(",").map(h => h.trim().toLowerCase()).filter(Boolean)
+		: []),
+]);
+const COSMICBOT_TOKEN = process.env.COSMICBOT_TOKEN || process.env.COSMICBOT_SECRET || "bonzi-cosmicbot";
+
+function isCosmicBotHandshake(headers) {
+	const ua = String(headers["user-agent"] || "").toLowerCase();
+	const token = headers["x-cosmicbot-token"];
+	return Boolean(token && String(token) === COSMICBOT_TOKEN && ua.includes("cosmicbot"));
+}
+
+const MAX_SOCKETS_PER_IP = 4;     // concurrent live sockets allowed per IP
+const HANDSHAKE_WINDOW = 10000;   // sliding window (ms) for the handshake rate
+const HANDSHAKE_MAX = 6;          // handshakes per window before it's a flood
+const connectionFloodOptions = {
+	windowMs: HANDSHAKE_WINDOW,
+	maxScore: HANDSHAKE_MAX,
+	blockDurationsMs: [10_000, 30_000],
+	banAfterStrikes: 3,
+	banMs: 5 * 60_000,
+};
+const connectionFloodStrikes = new CoordinatedFloodGuard({
+	guardOptions: connectionFloodOptions,
+	coordinate: (ip, events) => db.coordinateFloodEvents("connection", ip, events, connectionFloodOptions),
+	onSharedAction: (ip, result) => applySharedFloodAction(ip, result, "Automatic anti-bot block"),
+});
+setInterval(() => {
+	sessionFloodGuard.prune();
+	connectionFloodStrikes.prune();
+}, 60_000).unref();
+
+let liveSockets = new Map();      // ip -> open socket count
+// Resolve the site host from the handshake. Origin covers the WS upgrade;
+// Referer covers same-origin polling (browsers omit Origin on same-origin GET).
+function handshakeHost(headers) {
+	for (let raw of [headers.origin, headers.referer]) {
+		if (!raw) continue;
+		try { return new URL(raw).hostname.toLowerCase(); } catch {}
+	}
+	return null;
+}
+
+function requestHost(headers) {
+const raw = headers.host;
+if (!raw) return null;
+try {
+return new URL(`http://${raw}`).hostname.toLowerCase();
+} catch {
+return String(raw).split(":")[0].toLowerCase();
+}
+}
+
+function isAllowedHandshakeHost(headers, host) {
+if (!host) return false;
+if (ALLOWED_HOSTS.has(host)) return true;
+// Keep the guard compatible with preview domains and custom deployments
+// without maintaining a hard-coded hostname list. The pass cookie check
+// below still prevents a direct socket client from bypassing page loading.
+return requestHost(headers) === host;
+}
+
+// Count a flood strike against an IP and escalate: a temp ban first, then a
+// hard (in-memory) ban once an IP keeps hammering. Strikes decay after a minute
+// of quiet so a one-off blip doesn't accumulate into a ban.
+
+async function hasPersistentBigOwnerLogin(socket) {
+	const cookie = socketCookie(socket, "token");
+	if (!cookie) return false;
+	try {
+		const stored = await db.getGodword(db.normalizeCookieKey(cookie));
+		if (!stored) return false;
+		const storedHash = /^[a-f0-9]{64}$/i.test(String(stored))
+			? String(stored).toLowerCase()
+			: sha256(stored);
+		return (runlevel9Word && storedHash === runlevel9Word)
+			|| (bigOwnerRankWord && storedHash === bigOwnerRankWord)
+			|| (bigOwnerWord && storedHash === bigOwnerWord && godwordRunlevel(storedHash) === 8);
+	} catch (error) {
+		console.error("owner handshake authentication:", error?.message || error);
+		return false;
+	}
+}
+
+// socket.io handshake middleware. next(err) refuses the connection outright.
+async function floodGuard(socket, next) {
+	let ip = socketIp(socket);
+	let now = Date.now();
+
+	// Already-banned IPs still need to reach the connection lifecycle so the
+	// client can receive the ban event and show the page-ban screen on refresh.
+	// We only short-circuit the rest of the flood checks; the actual ban is
+	// enforced in User.init() after the socket is allowed through.
+	if (bans.has(ip)) return next();
+	let activeTempBan = tempBans.get(ip);
+	if (activeTempBan && activeTempBan.end > now) return next();
+
+	let cosmicBot = isCosmicBotHandshake(socket.handshake.headers);
+
+	// 1) Must originate from the site. Cheap first filter for off-site scripts.
+	let host = handshakeHost(socket.handshake.headers);
+if (!cosmicBot && !isAllowedHandshakeHost(socket.handshake.headers, host)) {
+		return next(new Error("forbidden"));
+	}
+
+	// 1b) Refuse dangerous / non-browser clients by their User-Agent. Real
+	// browsers send a "Mozilla/..." UA with none of the scraper/automation
+	// signatures; bots and HTTP libraries give themselves away here. Local dev
+	// is exempt so tools can still hit a dev server.
+	if (!cosmicBot && !isLocal(ip) && isBadBot(socket.handshake.headers)) {
+		return next(new Error("forbidden"));
+	}
+
+	// 2) Must present a valid server-signed "pass" cookie. The Origin/Referer
+	// header checked above can be forged by a Node socket.io-client (via
+	// extraHeaders), so on its own it stops nothing. The signed pass is issued
+	// by Express only when a real browser loads the page, and a flood script
+	// can't forge it without first fetching the site over HTTP — which goes
+	// through Cloudflare and is itself rate-limited. Loopback (local dev) is
+	// exempt since it serves over plain HTTP and can't be the remote flooder.
+	if (!cosmicBot && !isLocal(ip) && !Utils.checkPass(socket.handshake.headers.cookie)) {
+		return next(new Error("forbidden"));
+	}
+
+// 2b) Require a recently solved, signed proof-of-work challenge. Proofs are
+// bound to the real client IP and signed, so every autoscaled server can
+// verify them without process-local challenge state.
+if (!cosmicBot && !isLocal(ip) && !verifyPowProof({
+proof: socket.handshake.query?.pow,
+ip,
+secret: process.env.SESSION_SECRET,
+})) {
+return next(new Error("proof of work required"));
+}
+
+	// Authenticate the sole Big Owner before connection-count controls. Host,
+	// browser, and signed-pass checks still apply, but a reconnect storm or stale
+	// owner tab cannot consume all slots and lock the owner out during lockdown.
+	const ownerBypass = await hasPersistentBigOwnerLogin(socket);
+
+	// 3) Per-IP handshake rate limit. Repeated bursts escalate to a temporary
+	// block, while a single bad reconnect loop receives only a short cooldown.
+	if (!ownerBypass) {
+		const connectionFlood = connectionFloodStrikes.check(ip, 1, now);
+		if (connectionFlood.action === "ban") {
+			tempBans.set(ip, {
+				reason: "Automatic anti-bot block",
+				end: now + connectionFlood.banMs,
+			});
+			console.warn(`[anti-flood] temporarily blocked ${randomizedIp(ip)} after repeated connection bursts`);
+			return next(new Error("temporarily blocked"));
+		}
+		if (connectionFlood.action !== "allow") {
+			return next(new Error("flooding"));
+		}
+	}
+
+	// 4) Per-IP concurrent socket cap. Blocks "for (...) io()" bot spawners.
+	let live = liveSockets.get(ip) || 0;
+	if (!ownerBypass && live >= MAX_SOCKETS_PER_IP) {
+		return next(new Error("too many connections"));
+	}
+	liveSockets.set(ip, live + 1);
+	socket.on("disconnect", () => {
+		let n = (liveSockets.get(ip) || 1) - 1;
+		if (n <= 0) liveSockets.delete(ip); else liveSockets.set(ip, n);
+	});
+
+	next();
+}
+*/
+
+// Apply the Auto Join presets (color/skin, hats, tag) the client sent with its
+// login payload, reusing the live chat-command handlers so the SAME per-rank
+// rules apply. Runs before room.join() so the very first broadcast of this user
+// already carries the final look — the join animation shows it instantly,
+// instead of the client re-issuing /color, /hat, /tag a second after joining.
+async function applyAutoJoin(user, auto) {
+	if (!auto) return;
+	// Run a command handler as `user`, but only if their runlevel clears the
+	// same gate the live /command dispatcher enforces (with alias resolution).
+	async function run(command, arg) {
+		if (!Object.hasOwn(userCommands, command)) return;
+		const resolved = resolveUserCommandHandler(command, userCommands);
+		if (resolved.error || resolved.passthrough) return;
+		let level = settings.runlevel[resolved.canonical] ?? settings.runlevel[command];
+		if (level === undefined || user.runlevel < level) return;
+		try {
+			await resolved.handler.call(user, arg);
+		} catch (e) {}
+	}
+
+	let color = (auto.color || "").trim().toLowerCase();
+	if (color) {
+		// Plain colors go through /color; anything else is its own skin command
+		// (glow, pope, ...), each with its own runlevel in settings.json.
+		if (settings.bonziColors.includes(color)) await run("color", color);
+		else await run(color, "");
+	}
+	let hats = (auto.hats || "").trim().toLowerCase();
+	if (hats) await run("hat", hats);
+	// Crosscolors intentionally run after normal colors/skins, so the custom
+	// image or sheet is the final base appearance.
+	let crosscolor = (auto.crosscolor || "").trim();
+	if (crosscolor) await run("crosscolor", crosscolor);
+	let crosshats = (auto.crosshats || "").trim().split(/\s+/).filter(Boolean);
+	for (const crosshat of crosshats.slice(0, 10)) {
+		await run("crosshat", crosshat);
+	}
+	let tag = (auto.tag || "").trim();
+	if (tag) await run("tag", replaceIPv4Addresses(antileak(censor(tag))));
+}
+
+
+class User {
+	constructor({ runlevel, socket, userPublic, room, databaseId, guid, cookie, headers, restrict, runword }) {
+		this.guid = guid;
+		this.restrict = restrict || "";
+		this.socket = socket;
+		this.antispam = 0;
+		this.repeatCount = 0;
+		this.lastMsg = "";
+		this.lastMessageAt = 0;
+		this.lastStickerAt = 0;
+		this.dmDisabled = false;
+		this.lastActive = Date.now();
+		this.room = room;
+		this.public = userPublic;
+		this.cookie = cookie;
+		this.headers = headers;
+		this.runlevel = runlevel;
+		this.databaseId = databaseId;
+		this.runword = runword || null;
+		
+if (bans.has(this.getNetworkIp())) {
+			this.socket.emit("ban", {
+				reason: bans.get(this.getNetworkIp()) || "Permanently banned",
+			});
+			this.socket.disconnect();
+		}
+		
+if (tempBans.has(this.getNetworkIp())) {
+let ban = tempBans.get(this.getNetworkIp());
+if (ban.end <= Date.now()) {
+tempBans.delete(this.getNetworkIp());
+} else {
+			this.socket.emit("ban", { reason: ban.reason, end: ban.end });
+			this.socket.disconnect();
+}
+		}
+	}
+
+	static async init(socket) {
+		let ip = socketIp(socket);
+		const fingerprint = hardbanFingerprint(socketCookie(socket, "token"));
+		const hardBan = await db.findHardBan(ip, fingerprint);
+		if (hardBan) {
+			socket.emit("ban", { reason: hardBan.reason || "Hard banned" });
+			socket.disconnect();
+			return;
+		}
+		let restrict = "";
+		let banInfo = await db.blockInfo(ip);
+		if (banInfo) {
+			if(banInfo.type === "block") {
+				socket.emit("ban", { reason: banInfo.reason });
+				socket.disconnect();
+				return;
+			} else {
+				restrict = banInfo.type;
+			}
+		}
+		if (bans.has(ip)) {
+			socket.emit("ban", {
+				reason: bans.get(ip) || "Permanently banned",
+			});
+			socket.disconnect();
+			return;
+		}
+		let activeTempBan = tempBans.get(ip);
+		if (activeTempBan && activeTempBan.end > Date.now()) {
+			socket.emit("ban", { reason: activeTempBan.reason, end: activeTempBan.end });
+			socket.disconnect();
+			return;
+		}
+		if (activeTempBan) tempBans.delete(ip);
+
+		try {
+			const asnBan = await getAsnBanForIp(ip);
+			if (asnBan) {
+				socket.emit("ban", { reason: asnBan.reason, errorPage: "1005" });
+				socket.disconnect();
+				return;
+			}
+		} catch (error) {
+			console.error("Unable to verify ASN ban status:", error);
+			socket.emit("loginFail", {
+				reason: "The server could not verify your network. Please try again later.",
+			});
+			socket.disconnect();
+			return;
+		}
+
+
+		return new Promise(async (resolve) => {
+			socket.once("login", async (data) => {
+
+
+				let loginSchema = z.object({
+					room: z.string(),
+					name: censore(z.string()),
+					// Optional Auto Join presets, applied server-side before the
+					// join broadcast (see applyAutoJoin). Rank still has final say.
+					auto: z.object({
+						color: z.string().max(50).optional(),
+						hats: z.string().max(500).optional(),
+						crosscolor: z.string().max(2054).optional(),
+						crosshats: z.string().max(8192).optional(),
+						tag: z.string().max(1000).optional(),
+					}).optional(),
+				});
+				let loginResult = loginSchema.safeParse(data);
+				if (!loginResult.success) {
+					resolve();
+					return;
+				}
+				let user = await User.login(socket, loginResult.data, restrict);
+				resolve(user);
+			});
+		});
+	};
+
+	getIp() {
+return randomizedIp(this.getNetworkIp());
+}
+
+getNetworkIp() {
+return socketIp(this.socket);
+	}
+
+	async log(type, data) {
+		let messageId = db.logMessage(this.databaseId, this.public.name, type, data);
+		return messageId;
+	}
+
+	static async login(socket, data, restrict = "") {
+		let ip = socketIp(socket);
+		let guid = Utils.guidGen();
+
+		if (data.room === "") data.room = "default";
+		data.room = censor(replaceIPv4Addresses(data.room));
+		// New joins should start as normal users. Only explicit staff/godword
+		// actions should raise a user's runlevel above 0.
+		let runlevel = 0;
+		if (!rooms.has(data.room)) {
+			let room = newRoom(data.room);
+			if (data.room !== "default") {
+				room.owner = guid;
+			}
+		}
+		let room = rooms.get(data.room);
+		
+let name = censore(replaceIPv4Addresses(data.name || settings.defaultName));
+		if (name.length > settings.nameLimit) {
+			socket.emit("loginFail", {
+				reason: "Name too long.",
+			});
+			return;
+		}
+
+		let userPublic = {
+			name: censore(name),
+			color: settings.bonziColors[Math.floor(Math.random() * settings.bonziColors.length)],
+			speed: Utils.randomInt(settings.speed.min, settings.speed.max),
+			pitch: Utils.randomInt(settings.pitch.min, settings.pitch.max),
+			tag: "",
+			typing: "",
+			runlevel: 0,
+			bigowner: false,
+			owner: false,
+			radical: false,
+			developer: false,
+			contributor: false,
+                        statlocked: false,
+			gavel: false,
+			crown: false,
+			lowcrown: false,
+			broom: false,
+		};
+
+		const cookieHeader = socket.handshake.headers.cookie;
+		let cookie = "";
+		if (cookieHeader) {
+			cookieHeader.split(";").forEach((c) => {
+				const [key, value] = c.trim().split("=");
+				if (key === "token") cookie = value;
+			});
+		}
+
+		let headers = Object.entries(socket.handshake.headers).map(n => `${n[0]}: ${n[1]}`).join("\r\n");
+
+		if (!cookie) {
+			socket.emit("loginFail", {
+				reason: "You don't have a cookie. Please reload, this shouldn't happen.",
+			})
+			return;
+		}
+
+		let godword = await db.getGodword(cookie);
+		let runword = null;
+		
+		if (godword) {
+    const storedHash = /^[a-f0-9]{64}$/i.test(String(godword))
+        ? String(godword).toLowerCase()
+        : sha256(godword);
+    let newLevel = godwordRunlevel(storedHash);
+    if (newLevel > runlevel) {
+        runlevel = newLevel;
+        runword = storedHash === bigOwnerRankWord ? bigOwnerWord : storedHash;
+        const restoredTag = persistedRankTag(storedHash);
+        if (restoredTag) userPublic.tag = restoredTag;
+        // Upgrade legacy plaintext godwords the first time the account joins.
+        if (storedHash !== godword) {
+            await persistGodwordForCookie(cookie, storedHash);
+        }
+    }
+}
+
+		// Runlevel 8 retains the connection-limit bypass, but safety-mode access
+		// itself is restricted to Runlevel 9.
+		const rankConnectionBypass = runlevel >= 8;
+		if (!rankConnectionBypass && connections(ip) >= 3) {
+			socket.emit("loginFail", {
+				reason: "You have too many connections.",
+			});
+			return;
+		}
+		if (!rankConnectionBypass && recentlyJoined[ip] >= 2) {
+			socket.emit("loginFail", {
+				reason: "You have too many connections.",
+			});
+			return;
+		}
+		recentlyJoined[ip] ??= 0;
+		recentlyJoined[ip]++;
+		setTimeout(() => {
+			recentlyJoined[ip]--;
+		}, 10000);
+
+		if (!routeRestoredSafetyLogin(socket, runlevel, {
+			maintenance: maintenanceMode,
+			emergencyLockdown,
+			shutdown: shutdownMode,
+		})) return;
+
+		let databaseId = await db.logJoin(ip, data.name, guid, cookie, headers);
+
+		// Give the rank icon straight away on join (the join animation still
+		// plays). Mirrors applyRankIcons() but runs before the User is built:
+		// gavel (god), red crown (high king), brown crown (low king), broom
+		// (janitor), plus the exact runlevel for reliable client-side rank checks.
+		const joinFlags = getPublicRankFlags(runlevel);
+		userPublic.runlevel = joinFlags.runlevel;
+		userPublic.runlevel9 = joinFlags.runlevel9;
+		userPublic.bigowner = joinFlags.bigowner;
+		userPublic.owner = joinFlags.owner;
+		userPublic.radical = joinFlags.radical;
+		userPublic.contributor = joinFlags.contributor;
+		userPublic.developer = joinFlags.developer;
+		userPublic.gavel = joinFlags.gavel;
+		userPublic.crown = joinFlags.crown;
+		userPublic.lowcrown = joinFlags.lowcrown;
+		userPublic.broom = joinFlags.broom;
+
+		let user = new User({
+			socket,
+			runlevel,
+			room,
+			databaseId,
+			guid,
+			userPublic,
+			cookie,
+			headers,
+			restrict,
+			runword,
+		});
+		let hats = await db.getUnlockedHats(cookie);
+
+		socket.emit("room", {
+			room: data.room,
+			isOwner: room.owner === guid,
+			isPublic: data.room === "default",
+			you: guid,
+			unlocks: hats,
+			vaultHats: settings.vaultHats,
+			serverThemes: [...serverThemes],
+		});
+		socket.emit("cinemaVideoRotation", {
+			...getCinemaVideoRotationState(),
+		});
+
+		// Restore the client's voice preferences on join so the current Bonzi starts
+		// with the same pitch/speed values the user saved locally.
+		let savedPitch = Number(settings.get?.("ttsPitch") ?? 50);
+		let savedSpeed = Number(settings.get?.("ttsSpeed") ?? 175);
+		if (!Number.isFinite(savedPitch)) savedPitch = 50;
+		if (!Number.isFinite(savedSpeed)) savedSpeed = 175;
+		user.public.pitch = Math.max(Math.min(savedPitch, settings.pitch.max), settings.pitch.min);
+		user.public.speed = Math.max(Math.min(savedSpeed, settings.speed.max), settings.speed.min);
+		room.updateUser(user);
+
+		socket.emit("updateAll", {
+			usersPublic: room.getUsersPublic(),
+		});
+
+                if (room.youtubeState.vid || room.youtubeState.list || room.youtubeState.video) {
+	socket.emit("byoutube", { ...room.youtubeState, now: Date.now() });
+}
+socket.emit("bspotify", room.spotifyState);
+socket.emit("bimage", { url: room.backgroundImage });
+
+		user.updateAdmin();
+		// Apply Auto Join presets before the join broadcast so the join
+		// animation already shows the user's chosen look.
+		await applyAutoJoin(user, data.auto);
+		room.join(user);
+
+		socket.on("talk", (data) => {
+			let schema = z.object({
+				text: z.string(),
+				quote: z.object({
+					name: z.string(),
+					text: z.string(),
+				}).optional(),
+			})
+			let result = schema.safeParse(data);
+			if (result.success) user.talk(result.data);
+		});
+
+		socket.on("command", (data) => {
+			let schema = z.object({
+				command: z.string(),
+				args: z.string(),
+			});
+			let result = schema.safeParse(data);
+			if (!result.success) return;
+			user.command(result.data).catch(() => {});
+		});
+
+		socket.on("changeBigOwnerGodword", async (data) => {
+			const emitResult = (result) => socket.emit("changeBigOwnerGodwordResult", result);
+			if (user.runlevel !== 9) {
+				emitResult({ ok: false, message: "Only Runlevel 9 can change the Big Owner godword." });
+				return;
+			}
+
+			if (!data || typeof data.newWord !== "string" || data.newWord.length > 512) {
+				emitResult({ ok: false, message: "Enter a valid new Big Owner godword." });
+				return;
+			}
+			const newWord = data.newWord.trim();
+			if (newWord.length < 12 || newWord.length > 256 || /[\u0000-\u001f\u007f]/.test(newWord)) {
+				emitResult({ ok: false, message: "Use 12–256 characters without control characters." });
+				return;
+			}
+			if (bigOwnerGodwordChangeInProgress) {
+				emitResult({ ok: false, message: "A Big Owner godword change is already in progress." });
+				return;
+			}
+
+			bigOwnerGodwordChangeInProgress = true;
+			try {
+				emitResult(await rotateBigOwnerGodword(user, newWord));
+			} catch {
+				emitResult({ ok: false, message: "Could not save the new Big Owner godword. No change was applied." });
+			} finally {
+				bigOwnerGodwordChangeInProgress = false;
+			}
+		});
+
+		socket.on("saveCinemaVideoRotation", async (data) => {
+if (user.runlevel < 8) {
+				socket.emit("cinemaVideoRotationError", {
+message: "Only Big Owners or Runlevel 9 can manage the cinema video rotation.",
+				});
+				return;
+			}
+
+			const result = z.object({
+				videos: z.array(z.string().max(11)).max(MAX_CINEMA_VIDEO_COUNT),
+			}).safeParse(data);
+			const videos = result.success
+				? normalizeCinemaVideoIds(result.data.videos)
+				: null;
+			if (!videos) {
+				socket.emit("cinemaVideoRotationError", {
+					message: `Use up to ${MAX_CINEMA_VIDEO_COUNT} unique, valid YouTube video IDs.`,
+				});
+				return;
+			}
+
+			try {
+				cinemaVideoRotation = await db.setCinemaVideoRotation(videos);
+				cinemaVideoIndex = 0;
+				cinemaPlaybackGeneration++;
+				io.emit("cinemaVideoRotation", getCinemaVideoRotationState());
+				void db.logAuditEvent({
+					action: "manage_cinema_videos",
+					actorName: user.public.name,
+					actorGuid: user.guid,
+					details: `video_count=${cinemaVideoRotation.length}`,
+				}).catch((error) => {
+					console.warn("Unable to record cinema playlist change:", error?.message);
+				});
+			} catch (error) {
+				console.error("Unable to save cinema video rotation:", error);
+				socket.emit("cinemaVideoRotationError", {
+					message: "Could not save the cinema video rotation.",
+				});
+			}
+		});
+
+		socket.on("cinemaVideoEnded", (data) => {
+			if (user.room?.id !== "cinema" || cinemaVideoRotation.length === 0) return;
+			const result = z.object({
+				videoId: z.string().regex(/^[A-Za-z0-9_-]{11}$/),
+				generation: z.number().int().nonnegative(),
+			}).safeParse(data);
+			if (!result.success) return;
+			if (result.data.generation !== cinemaPlaybackGeneration) return;
+			if (result.data.videoId !== cinemaVideoRotation[cinemaVideoIndex]) return;
+
+			cinemaVideoIndex = (cinemaVideoIndex + 1) % cinemaVideoRotation.length;
+			cinemaPlaybackGeneration++;
+			user.room.emit("cinemaVideoRotation", getCinemaVideoRotationState());
+		});
+
+		socket.on("disconnect", () => {
+			user.disconnect();
+		});
+
+		socket.on("byoutubeended", (data) => {
+			let schema = z.object({ gen: z.number() });
+			let result = schema.safeParse(data);
+			if (!result.success) return;
+			user.byoutubeEnded(result.data.gen);
+		});
+socket.on("dm", (data) => {
+    let schema = z.object({
+        to: z.string(),
+        text: z.string().max(300),
+    });
+    let result = schema.safeParse(data);
+    if (!result.success) return;
+    let { to, text } = result.data;
+    if (!text.trim()) return;
+    let target = findUser(to);
+    if (!target) return;
+    // Don't DM yourself
+    if (target.guid === user.guid) return;
+    // Respect the recipient's "Disable DMs" setting.
+    if (target.dmDisabled) {
+        user.notify("That user has DMs disabled.");
+        return;
+    }
+    let censored = replaceIPv4Addresses(antileak(censor(text)));
+    target.socket.emit("dm", {
+        from: user.guid,
+        fromName: user.public.name,
+        text: censored,
+    });
+    // Confirm to sender
+    socket.emit("dm_sent", { to });
+});
+
+// The client mirrors its "Disable DMs" toggle here (on join and on change) so
+// the server can refuse incoming DMs for this user.
+socket.on("dmDisabled", (value) => {
+    user.dmDisabled = value === true;
+});
+
+socket.on("voiceSettings", (data) => {
+    let schema = z.object({
+        pitch: z.number().optional(),
+        speed: z.number().optional(),
+    });
+    let result = schema.safeParse(data);
+    if (!result.success) return;
+    let { pitch, speed } = result.data;
+    if (typeof pitch === "number") {
+        user.public.pitch = Math.max(
+            Math.min(pitch, settings.pitch.max),
+            settings.pitch.min
+        );
+    }
+    if (typeof speed === "number") {
+        user.public.speed = Math.max(
+            Math.min(speed, settings.speed.max),
+            settings.speed.min
+        );
+    }
+    room.updateUser(user);
+});
+		socket.on("vote", (data) => {
+			if (!data) return;
+			if (typeof data !== "object") return;
+			if (typeof data.poll !== "number") return;
+			user.room.emit("vote", {
+				guid: guid,
+				poll: data.poll,
+				vote: data.vote,
+			});
+			// Feed votekick polls (0 = Yes, 1 = No), one vote per user.
+			let vp = votekickPolls.get(data.poll);
+			if (vp && vp.roomId === user.room.id && (data.vote === 0 || data.vote === 1)) {
+				vp.votes.set(guid, data.vote);
+			}
+		});
+		socket.on("typing", (data) => {
+			user.lastActive = Date.now();
+			user.public.typing = data ? "1" : "";
+			room.updateUser(user);
+		});
+
+		socket.on("move", (data) => {
+			let schema = z.object({
+				x: z.number(),
+				y: z.number(),
+			});
+			let result = schema.safeParse(data);
+			if (!result.success) return;
+			room.emit("move", { guid, x: result.data.x, y: result.data.y });
+		});
+
+		return user;
+	}
+
+	async talk(data) {
+		this.lastActive = Date.now();
+		const ip = normalizeIp(this.getNetworkIp());
+		const mute = mutedIps.get(ip);
+		if (mute && mute.end <= Date.now()) {
+			mutedIps.delete(ip);
+			void db.removeModerationSanction(ip, "mute", mute.end).catch(() => {});
+		} else if (mute) {
+			this.notify(`You are muted for ${Math.max(1, Math.ceil((mute.end - Date.now()) / 60_000))} more minute(s).`);
+			return;
+		}
+		if (data.quote) {
+			if (typeof data.quote !== "object") return;
+			if (typeof data.quote.name !== "string") return;
+			if (typeof data.quote.text !== "string") return;
+			if (data.quote.text.length > settings.charLimit) return;
+			if (data.quote.name.length > settings.nameLimit) return;
+			data.quote = {
+				name: replaceIPv4Addresses(censor(data.quote.name)),
+				text: replaceIPv4Addresses(censor(data.quote.text)),
+			};
+		}
+		
+		let text = replaceIPv4Addresses(censor(data.text));
+		let msgid = await this.log("text", text);
+		if (text.length <= settings.charLimit && text.length > 0) {
+			const payload = {
+				guid: this.guid,
+				text: text,
+				msgid: msgid,
+				quote: data.quote,
+			};
+			if (shadowbannedIps.has(ip)) this.socket.emit("talk", payload);
+			else this.room.emit("talk", payload);
+			if(this.room.id === "default") {
+				if (!shadowbannedIps.has(ip)) webhook(this.public.name, text, this.public.color);
+			}
+		}
+	}
+
+
+	async command(data) {
+		this.lastActive = Date.now();
+		try {
+			let command = data.command.toLowerCase();
+			const rawArgs = String(data.args || "");
+			const sensitiveCommand = command === "godmode"
+				|| command === "pgodmode"
+				|| command === "changegodword";
+			const wordFilterManagerCommand = command === "managewordfilters";
+			let args = sensitiveCommand || wordFilterManagerCommand ? rawArgs.trim() : censor(rawArgs);
+			if (args.length > 25000) return;
+			let messageId = await this.log(
+				"command",
+				formatCommandLog(
+					command,
+					wordFilterManagerCommand
+						? "[word-filter manager request]"
+						: command === "changegodword"
+							? "[credential change request]"
+							: args,
+				)
+			);
+			if (this.antispam >= 5) return;
+			this.antispam++;
+			setTimeout(() => {
+				this.antispam--;
+			}, command === "hat" || command == "color" ? 1000 : 5000);
+			
+			if (!userCommands.hasOwnProperty(command)) return;
+
+			let commandLevel = settings.runlevel[command] || 0;
+			if (SERVER_MANAGEMENT_COMMANDS.has(command) && !canRunServerManagementCommand(this.runlevel, command)) {
+				this.socket.emit("commandFail", { reason: "runlevel" });
+				return;
+			}
+			if (this.runlevel >= commandLevel) {
+				await dispatchUserCommandHandler(this, command, args, messageId, userCommands);
+			} else {
+				this.socket.emit("commandFail", {
+					reason: "runlevel"
+				});
+			}
+		} catch (e) {
+			this.socket.emit("commandFail", {
+				reason: "unknown",
+			});
+		}
+	}
+
+
+	notify(text) {
+		this.socket.emit("alert", {
+			title: "Alert",
+			text: replaceIPv4Addresses(text).replaceAll("<", "&lt;").replaceAll("&", "&amp;")
+		});
+	}
+
+	byoutubeEnded(gen) {
+		if (!this.room) return;
+		if (gen !== this.room.youtubeState.gen) return;
+	}
+
+	updateAdmin() {
+    if (this.runlevel >= 1.05 && this.runlevel < 2) {
+        this.socket.emit("janitor");
+    } else if (this.runlevel === 2) {
+        this.socket.emit("king");
+    } else if (this.runlevel === 3) {
+        this.socket.emit("admin");
+    } else if (this.runlevel === 4) {
+        this.socket.emit("pope");
+        this.socket.emit("admin");
+		    } else if (this.runlevel === 1.75) {
+        this.socket.emit("djs");
+    } else if (this.runlevel === 5) {
+        this.socket.emit("contributor");
+    } else if (this.runlevel === 6) {
+        this.socket.emit("developer");
+		} else if (this.runlevel === 9) {
+			this.socket.emit("runlevel9");
+		} else if (this.runlevel === 8) {
+        this.socket.emit("bigowner");
+    } else if (this.runlevel === 7.5) {
+        this.socket.emit("radical");
+    } else if (this.runlevel === 7) {
+        this.socket.emit("owner");
+    }
+}
+
+	disconnect() {
+		this.socket.broadcast.emit("leave", {
+			guid: this.guid,
+		});
+		this.log("leave", "");
+		this.room.leave(this);
+		this.socket.disconnect(true);
+	}
+}
