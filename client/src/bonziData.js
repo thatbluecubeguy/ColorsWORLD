@@ -332,7 +332,7 @@ pope: [
 			},
 			{
 				type: "text",
-				text: "Mute my TTS, That's your problem."
+				text: "Mute me then, That's your fucking problem."
 			}
 		], [
 			{
@@ -344,7 +344,36 @@ pope: [
 				type: "text",
 				text: "Time for whatever horrible fucking jokes the creator of this site wrote."
 			}
-		]
+		], [
+		   {
+			   type: "text",
+			   text: "Prepare for something Seamus and Fune never heard of, {NAME}."
+		   },
+		   {
+			   type: "text",
+			   text: "HUMOUR"
+		   },
+		], [
+		   {
+			   type: "text",
+			   text: "THE FOLLOWING JOKE MAY OFFEND PEOPLE."
+		   },
+		], [
+		   {
+			   type: "text",
+			   text: "Prepare yourself, {NAME}."
+		   },
+		], [
+		   {
+			   type: "text",
+			   text: "{NAME}? I didn't know you liked my horribly written jokes so much."
+		   },
+		], [
+		   {
+			   type: "text",
+			   text: "OK, here goes....."
+		   },
+		], 
 	],
 	event_list_joke_mid: [
 		[
@@ -387,7 +416,7 @@ pope: [
 			},
 			{
 				type: "text",
-				text: "What were you expecting? A dick joke? You're a sick fuck."
+				text: "What were you expecting? A 18+ joke? You're a retarded fuck."
 			}
 		], [
 			{
@@ -396,7 +425,7 @@ pope: [
 			},
 			{
 				type: "text",
-				text: "A giant inflatable buttplug."
+				text: "A giant inflatable nothingburger."
 			}
 		], [
 			{
@@ -405,7 +434,7 @@ pope: [
 			},
 			{
 				type: "text",
-				text: "Sonic's WOAH WOAH WOAH WHAT?!"
+				text: "Sonic's AYOOOOOOOOOOOOOOOOOOO WHAT THE FUUUUUUUUUUUUUUUUUUUUU-"
 			}
 		], [
 			{
@@ -454,7 +483,7 @@ pope: [
 			},
 			{
 				type: "text",
-				text: "Melika and Bjorn."
+				text: "Melika, Bjorn, Shitcef, Bob and Jaxon."
 			}
 		], [
 			{
@@ -487,7 +516,34 @@ pope: [
 				type: "text",
 				text: "I'm a comedic genius, I know."
 			},
-		]
+		], [
+			{
+				type: "text",
+				text: "Why was six afraid of seven?"
+			},
+			{
+				type: "text",
+				text: "SIX SEV- No we're are not doing ts."
+			}
+		], [
+			{
+				type: "text",
+				text: "Who do you call a TouHou gooner?"
+			},
+			{
+				type: "text",
+				text: "Seamus Kendrick Cremeens from Sullivan, Ohio."
+			}
+		], [
+			{
+				type: "text",
+				text: "I like KFC, I have no water and I have huge lips. Who am I?"
+			},
+			{
+				type: "text",
+				text: "A stinky- ewwwwwwwwwwww racist mofo gtfo fuckune supporter-"
+			}
+		],
 	],
 	event_list_joke_end: [
 		[
@@ -537,7 +593,37 @@ pope: [
 				type: "text",
 				text: "Help! I'm being oppressed!"
 			}
-		]
+		], [
+			{
+				type: "text",
+				text: "I hope you're offended."
+			}
+		],	[
+			{
+				type: "text",
+				text: "I hope you're offended."
+			}
+		],	[
+			{
+				type: "text",
+				text: "Look, I didn't write these. I just work here."
+			}
+		], 	[
+			{
+				type: "text",
+				text: "Don't report me. I know where your cookies are stored."
+			}
+		],	[
+			{
+				type: "text",
+				text: "If you laughed at that, congratulations. You're going to hell. I'll see you there."
+			}
+		],	[
+			{
+				type: "text",
+				text: "I'm not sorry. You clicked the joke button. You did this to yourself."
+			}
+		],			
 	],
 
 	// ============================================================================
@@ -577,27 +663,6 @@ pope: [
 		],
 		[
 			{
-				type: "anim",
-				anim: "earth_fwd",
-				ticks: 15
-			},
-			{
-				type: "text",
-				text: "Did you know that the owner of this site (RadicalGreen) is from Korea, which is why the domain is bonziworld.kr?",
-				say: "Did you know that the owner of this site is from Korea, which is why the domain is bonzi world dot k r?",
-			},
-			{
-				type: "anim",
-				anim: "earth_back",
-				ticks: 15
-			},
-			{
-				type: "anim",
-				anim: "grin_fwd",
-				ticks: 15
-			}
-		],		[
-			{
 				type: "text",
 				text: "Fun Fact: The skript kiddie of this site didn't bother checking if the text that goes into the dialog box is HTML code."
 			},
@@ -607,6 +672,16 @@ pope: [
 				say: "toppest jej"
 			}
 		],
+		[
+			{
+				type: "text",
+				text: "Fun Fact: The skript kiddie- WAIT A MINUTE GUYS I THINK I KNOW WHERE THIS IS GOING"
+			},
+			{
+				type: "text",
+				text: "BAAAAAAAAAAAAAAAAAAAAAAAAAHHHHHHHHHHHHHHHHHH",
+			}
+		],		
 
 		// ===== Periodic Table / Chemistry Facts =====
 		[
@@ -1203,7 +1278,11 @@ BonziData.joke2_jokes = [
   "Why don't skeletons fight each other?",
   "Hey {NAME} guess what? you're a stupid bitch! you're a stupid fucking bitch! how dumb you are...",
   "What do you call cheese that isn't yours?",
-  "Nacho cheese."
+  "Nacho cheese.",
+  "What do you call a cow that can't give milk?",
+  "AAAAAAAAAAAAAAA MY UTTERS GOT BLUE SCREENED-",
+  "What type of cow that eats grass?",
+  "ASS"	
 ];
 
 BonziData.event_list_joke2_open = [
@@ -1230,7 +1309,7 @@ BonziData.event_list_joke2_end = [
 	[
 		{
 			type: "text",
-			text: "i made those jokes like 743287813428741327714970503291 years ago."
+			text: "i made those jokes like 133790027632169420 years ago."
 		}
 	]
 ];
