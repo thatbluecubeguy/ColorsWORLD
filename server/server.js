@@ -136,6 +136,8 @@ const wtfQuotes = [
 	"Do you know how much /wtf quotes there are?",
 	"Yeah, of course {NAME} wants me to use /wtf. Hah hah! Look at the stupid {COLOR} Microsoft Agent character embarrassing himself! Fuck you. It isn't funny.",
 	"Damn, {NAME} really likes /wtf",
+	"i watch klasky csupo effects but now people call me a logotard",
+	"Fun fact: BAAAAAAAAAAAAAAAAAAAAAAAAHHHHHHHHHHHHH",
 ];
 
 app.use(express.json());
