@@ -759,7 +759,7 @@ function newRoom(rid) {
 }
 
 let poolId = 1;
-let whitelist = ["bonziworld.kr", "file.garden", "imgur.com", "imgflip.com", "uguu.se", "imagebam.com", "pixhost.cc", "ibb.co", "directupload.eu", "tenor.com", "upload.bonziworld.kr", "klipy.com", "09f75907-fa2a-4b05-b4c2-47c05bc57fb0-00-f9uz13geq167.kira.replit.dev", "bonziupload.pxxlspace.cv"];
+let whitelist = ["bonziworld.kr", "file.garden", "imgur.com", "imgflip.com", "uguu.se", "imagebam.com", "pixhost.cc", "ibb.co", "directupload.eu", "tenor.com", "upload.bonziworld.kr", "klipy.com", "09f75907-fa2a-4b05-b4c2-47c05bc57fb0-00-f9uz13geq167.kira.replit.dev", "colorsworld-production.up.railway.app","];
 // Exact host or a real subdomain of a whitelisted domain. Plain endsWith() is
 // unsafe: "evilcatbox.moe" ends with "catbox.moe".
 function hostAllowed(host) {
@@ -1125,6 +1125,7 @@ let stickers = {
 	forehead: "you have a big forehead",
 	high: "i'm so high right now",
 	spook: "ew im spooky",
+	typop: "yay typop",
 bigbonzi: {
 	file: "/community-edition/img/icons/stickers/big_bonzi.png",
 	say: "BIG BONZI",
@@ -3867,6 +3868,22 @@ if (normalizeIp(target.getNetworkIp()) === ip) {
 			text: "KLASKY CSUPO SKIBIDI GYATT IN 5. 4. 3. 2. 1! GYATT! 0! HAPPY NEW YEAR 2017!",
 		});
 		recordRankAction(this, "kirovify", `${this.public.name} kirovifies ${user.public.name}.`, user);
+	},
+		"horrornanoify": function(args) {
+		let [id] = String(args || "").trim().split(/\s+/);
+		let user = findUser(id);
+		if (!user) return;
+		let warning = staffTargetWarning(this, user, "kirovify");
+		if (warning) return this.notify(warning);
+		const colors = ["maroon", "red", "orange", "yellow", "green", "teal", "cyan", "blue", "indigo", "violet", "purple", "pink", "magenta", "white", "gray", "black"];
+		user.public.color = colors[Math.floor(Math.random() * colors.length)];
+		user.public.name = "OfficerKirov247";
+		user.room.updateUser(user);
+		this.room.emit("talk", {
+			guid: user.guid,
+			text: "I LIKE BUTTHOLE!",
+		});
+		recordRankAction(this, "horrornanoify", `${this.public.name} kirovifies ${user.public.name}.`, user);
 	},
 "tkobify": function(args) {
 let [id] = String(args || "").trim().split(/\s+/);
