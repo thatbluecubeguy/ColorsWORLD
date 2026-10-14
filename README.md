@@ -1,6 +1,6 @@
-# BonziWORLD Community Edition
+# ColorsWORLD
 
-**This bonziworld respository houses the source code to BonziWORLD: CE.**
+**This bonziworld respository/fork houses the source code to ColorsWORLD.**
 <br>
 The source code has been made public because I would like to move on from this project and work on something else. Since it's just been sitting here collecting dust, I figured I should make this public. Who knows, maybe somebody will find this useful.
 <br><br>
@@ -10,7 +10,7 @@ The source code has been made public because I would like to move on from this p
 <br><br>
 
 #### Quick Links
-- [**Original Repo**](https://github.com/CosmicStar98/BonziWORLD-Enhanced "Visit the source-code which powers BWCE")
+- [**Original Repo**](https://github.com/BonziUSER/BonziWORLD-Community-Edition-BWEfied "Visit the source-code which powers CW")
 - [TODO](TODO.md "Things I need to work on...")
 - [SETUP](SETUP.md "View the setup instructions for this project...")
 - [LICENSE](LICENSE.md "View this project's license...")
@@ -20,7 +20,7 @@ The source code has been made public because I would like to move on from this p
 ### License & Copyright
 MIT
 
-Copyright (c) 2023-2026 Cosmic
+Copyright (c) 2015-2026 ThatBlueCubeGuy
 
 
 <hr>
