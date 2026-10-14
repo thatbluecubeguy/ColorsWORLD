@@ -1,6 +1,6 @@
 ## MIT License
 
-### Copyright (c) 2023-2026 Cosmic
+### Copyright (c) 2015-2026 ThatBlueCubeGuy
 
 ```
 Permission is hereby granted, free of charge, to any person obtaining a copy
