@@ -1,4 +1,4 @@
-# BWE Setup Instructions
+# CW Setup Instructions
 
 ### Requirements
 - NodeJS v19 or later
@@ -28,10 +28,10 @@
 <br>
 <hr>
 
-In a terminal/command prompt, navigate to where you'd like BonziWORLD Enhanced to be placed and run the following:
+In a terminal/command prompt, navigate to where you'd like ColorsWORLD to be placed and run the following:
 ```
-git clone https://github.com/CosmicStar98/BonziWORLD-Enhanced
-cd BonziWORLD-Enhanced
+git clone https://github.com/thatbluecubeguy/ColorsWORLD/
+cd ColorsWORLD
 ```
 ## Client
 ```
@@ -46,10 +46,10 @@ node server.js
 <pre><span><code><a href="https://www.youtube.com/watch?v=krcYPrjIDzU" alt="Tutorial" title="Tutorial">Tutorial</a>
 </code></span></pre>
 
-After this, BonziWORLD Enhanced will be accessible on port 3000. ([localhost:3000](http://localhost:3000 "localhost on port 3000..."))
+After this, ColorsWORLD Enhanced will be accessible on port 3000. ([localhost:3000](http://localhost:3000 "localhost on port 3000..."))
 <br><br>
-## Replit/Glitch
-If you are using replit or glitch this project will require additional steps.
+## Replit (vibecoded asf)
+If you are using replit, this project will require additional steps.
 
 <pre><span><code>open "/json/settings.json" in your prefered text editor and scroll all the way to the bottom,
 find an option called "isReplit" and set it to true.
