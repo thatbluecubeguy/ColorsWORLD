@@ -39,7 +39,7 @@ This part is unneeded. The client comes pre-built.
 ```
 ## Server
 ```
-npm install
+npm i --force (if does not work, try npm install)
 node server.js
 ```
 ### Server (nginx)
